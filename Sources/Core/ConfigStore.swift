@@ -143,13 +143,13 @@ final class ConfigStore {
             return
         }
 
-        let packagedCoreURL = packagedAssetsURL
-            .appendingPathComponent("core", isDirectory: true)
-            .appendingPathComponent("v2ray")
+        let packagedCoreURL = packagedCoreExecutableURL(from: packagedAssetsURL)
         let packagedPACURL = packagedAssetsURL.appendingPathComponent("proxy.js")
         let targetPACURL = supportRootURL.appendingPathComponent("proxy.js")
 
-        try copyFileIfNeeded(from: packagedCoreURL, to: coreExecutableURL(), executable: true)
+        if let packagedCoreURL {
+            try copyFileIfNeeded(from: packagedCoreURL, to: coreExecutableURL(), executable: true)
+        }
         try copyFileIfNeeded(from: packagedPACURL, to: targetPACURL, executable: false)
     }
 
@@ -168,6 +168,23 @@ final class ConfigStore {
         ]
 
         return candidates.first(where: { isDirectory(at: $0) })
+    }
+
+    private func packagedCoreExecutableURL(from packagedAssetsURL: URL) -> URL? {
+        let fallbackExecutableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        let executableURL = Bundle.main.executableURL ?? fallbackExecutableURL
+        let executableDirectoryURL = executableURL.deletingLastPathComponent()
+
+        let candidates = [
+            packagedAssetsURL.appendingPathComponent("core", isDirectory: true).appendingPathComponent("v2ray"),
+            executableDirectoryURL
+                .appendingPathComponent("..", isDirectory: true)
+                .appendingPathComponent("Helpers", isDirectory: true)
+                .appendingPathComponent("v2ray")
+                .standardizedFileURL
+        ]
+
+        return candidates.first(where: { isFile(at: $0) })
     }
 
     private func copyFileIfNeeded(from sourceURL: URL, to destinationURL: URL, executable: Bool) throws {
