@@ -12,6 +12,7 @@ APP_MACOS_DIR="$APP_CONTENTS_DIR/MacOS"
 APP_HELPERS_DIR="$APP_CONTENTS_DIR/Helpers"
 APP_RESOURCES_DIR="$APP_CONTENTS_DIR/Resources"
 APP_ASSETS_DIR="$APP_RESOURCES_DIR/assets"
+ICON_SOURCE="$ROOT_DIR/Resources/AppIcon.icns"
 ZIP_PATH="$DIST_DIR/v2rayE-macos-$VERSION.zip"
 
 APP_SUPPORT_DIR="$HOME/Library/Application Support/v2rayE"
@@ -57,6 +58,9 @@ mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_ASSETS_DIR"
 cp "$BUILD_DIR/arm64-apple-macosx/release/v2rayE" "$APP_MACOS_DIR/v2rayE"
 cp "$CORE_SOURCE" "$APP_HELPERS_DIR/v2ray"
 cp "$PAC_SOURCE" "$APP_ASSETS_DIR/proxy.js"
+if [ -f "$ICON_SOURCE" ]; then
+  cp "$ICON_SOURCE" "$APP_RESOURCES_DIR/AppIcon.icns"
+fi
 
 chmod +x "$APP_MACOS_DIR/v2rayE" "$APP_HELPERS_DIR/v2ray"
 
@@ -71,6 +75,8 @@ cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
     <string>v2rayE</string>
     <key>CFBundleExecutable</key>
     <string>v2rayE</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.local.v2raye</string>
     <key>CFBundleInfoDictionaryVersion</key>
