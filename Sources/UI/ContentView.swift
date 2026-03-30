@@ -118,15 +118,25 @@ struct ContentView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("v2rayE")
                         .font(.system(size: 24, weight: .bold, design: .rounded))
-                    Text("macOS 原生代理控制台")
-                        .font(.caption)
+
+                    Text(appModel.appVersion)
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
+
+                Button {
+                    appModel.checkForUpdates()
+                } label: {
+                    Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 Button {
                     openAddSubscriptionWindow()
@@ -136,8 +146,6 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-
-                statusBadge
             }
 
             HStack(spacing: 12) {
@@ -315,28 +323,11 @@ struct ContentView: View {
     }
 
     private var footerBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                compactChip(icon: "shippingbox", text: appModel.appVersion)
+        HStack(spacing: 10) {
+            toggleConnectionButton
 
-                Button {
-                    appModel.checkForUpdates()
-                } label: {
-                    Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Spacer()
-            }
-
-            HStack(spacing: 10) {
-                toggleConnectionButton
-
-                actionButton(title: "退出", systemImage: "power", tint: .red) {
-                    appModel.quitApp()
-                }
+            actionButton(title: "退出", systemImage: "power", tint: .red) {
+                appModel.quitApp()
             }
         }
     }
@@ -353,22 +344,6 @@ struct ContentView: View {
                 appModel.connect()
             }
         }
-    }
-
-    private var statusBadge: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(color(for: appModel.status.state))
-                .frame(width: 8, height: 8)
-            Text(stateLabel(for: appModel.status.state))
-                .font(.caption.weight(.semibold))
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            Capsule(style: .continuous)
-                .fill(color(for: appModel.status.state).opacity(0.12))
-        )
     }
 
     private var statusIcon: some View {

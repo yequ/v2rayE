@@ -302,8 +302,8 @@ final class AppModel: ObservableObject {
     }
 
     private static func makeVersionString() -> String {
-        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let shortVersion = versionValue(for: "CFBundleShortVersionString")
+        let buildVersion = versionValue(for: "CFBundleVersion")
 
         switch (shortVersion, buildVersion) {
         case let (short?, build?) where !short.isEmpty && !build.isEmpty:
@@ -315,5 +315,43 @@ final class AppModel: ObservableObject {
         default:
             return "-"
         }
+    }
+
+    private static func versionValue(for key: String) -> String? {
+        if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String {
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedValue.isEmpty {
+                return trimmedValue
+            }
+        }
+
+        for infoURL in fallbackInfoPlistURLs {
+            guard let data = try? Data(contentsOf: infoURL),
+                  let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                  let value = plist[key] as? String else {
+                continue
+            }
+
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedValue.isEmpty {
+                return trimmedValue
+            }
+        }
+
+        return nil
+    }
+
+    private static var fallbackInfoPlistURLs: [URL] {
+        let sourceFileURL = URL(fileURLWithPath: #filePath)
+        let projectRootURL = sourceFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let resourceInfoURL = projectRootURL
+            .appendingPathComponent("Resources", isDirectory: true)
+            .appendingPathComponent("Info.plist")
+
+        return [resourceInfoURL]
     }
 }
