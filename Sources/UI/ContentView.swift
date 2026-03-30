@@ -315,11 +315,28 @@ struct ContentView: View {
     }
 
     private var footerBar: some View {
-        HStack(spacing: 10) {
-            toggleConnectionButton
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                compactChip(icon: "shippingbox", text: appModel.appVersion)
 
-            actionButton(title: "退出", systemImage: "power", tint: .red) {
-                appModel.quitApp()
+                Button {
+                    appModel.checkForUpdates()
+                } label: {
+                    Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+            }
+
+            HStack(spacing: 10) {
+                toggleConnectionButton
+
+                actionButton(title: "退出", systemImage: "power", tint: .red) {
+                    appModel.quitApp()
+                }
             }
         }
     }

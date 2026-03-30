@@ -22,5 +22,17 @@
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
+    <key>SUFeedURL</key>
+    <string>https://yequ.github.io/v2rayE/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>Q+7zctJONMQD7KC3mm4yyrTSxkkpyy0H5DsYRhWEkIw=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>

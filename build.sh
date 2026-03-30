@@ -14,15 +14,34 @@ APP_RESOURCES_DIR="$APP_CONTENTS_DIR/Resources"
 APP_ASSETS_DIR="$APP_RESOURCES_DIR/assets"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon.icns"
 ZIP_PATH="$DIST_DIR/v2rayE-macos-$VERSION.zip"
+REPO_OWNER="${REPO_OWNER:-yequ}"
+REPO_NAME="${REPO_NAME:-v2rayE}"
+APPCAST_URL="${APPCAST_URL:-https://$REPO_OWNER.github.io/$REPO_NAME/appcast.xml}"
+RELEASE_TAG="v$VERSION"
+RELEASE_NOTES_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/tag/$RELEASE_TAG"
+RELEASE_DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$RELEASE_TAG/$(basename "$ZIP_PATH")"
+APPCAST_TEMPLATE_PATH="$DIST_DIR/appcast.xml"
+APPCAST_PUBLISH_PATH="${APPCAST_PUBLISH_PATH:-$ROOT_DIR/appcast.xml}"
+BUILD_NUMBER="$(date +%Y%m%d%H%M)"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+SPARKLE_ED_SIGNATURE="${SPARKLE_ED_SIGNATURE:-}"
+SPARKLE_BIN_DIR="${SPARKLE_BIN_DIR:-}"
 
 APP_SUPPORT_DIR="$HOME/Library/Application Support/v2rayE"
-PAC_SOURCE="$APP_SUPPORT_DIR/proxy.js"
+PAC_SOURCE_PATH="${PAC_SOURCE_PATH:-$APP_SUPPORT_DIR/proxy.js}"
+CORE_SOURCE_PATH="${CORE_SOURCE_PATH:-}"
 CORE_SOURCE_CANDIDATES=(
   "$APP_SUPPORT_DIR/core/v2ray"
   "$APP_SUPPORT_DIR/core/v2ray/v2ray"
 )
 
-find_core_source() {
+resolve_core_source() {
+  if [ -n "$CORE_SOURCE_PATH" ] && [ -f "$CORE_SOURCE_PATH" ]; then
+    printf '%s\n' "$CORE_SOURCE_PATH"
+    return 0
+  fi
+
+  local candidate
   for candidate in "${CORE_SOURCE_CANDIDATES[@]}"; do
     if [ -f "$candidate" ]; then
       printf '%s\n' "$candidate"
@@ -33,36 +52,179 @@ find_core_source() {
   return 1
 }
 
+write_default_pac() {
+  local target_path="$1"
+
+  cat > "$target_path" <<'PAC'
+function FindProxyForURL(url, host) {
+    if (isPlainHostName(host) || shExpMatch(host, "*.local")) {
+        return "DIRECT";
+    }
+
+    return "SOCKS5 127.0.0.1:1080; PROXY 127.0.0.1:1087; DIRECT";
+}
+PAC
+}
+
 sign_bundle() {
   local target="$1"
   /usr/bin/codesign --force --sign - --timestamp=none "$target"
 }
 
-CORE_SOURCE="$(find_core_source || true)"
-if [ -z "$CORE_SOURCE" ]; then
-  echo "error: 未找到 v2ray 核心文件，请先放到 $APP_SUPPORT_DIR/core/v2ray 或 $APP_SUPPORT_DIR/core/v2ray/v2ray"
-  exit 1
-fi
+find_sparkle_bin_dir() {
+  local candidates=()
 
-if [ ! -f "$PAC_SOURCE" ]; then
-  echo "error: 未找到 PAC 文件：$PAC_SOURCE"
-  exit 1
-fi
+  if [ -n "$SPARKLE_BIN_DIR" ]; then
+    candidates+=("$SPARKLE_BIN_DIR")
+  fi
+
+  candidates+=(
+    "$ROOT_DIR/.sparkle/bin"
+    "$ROOT_DIR/Sparkle/bin"
+    "/Applications/Sparkle/bin"
+    "/Applications/Sparkle.app/Contents/MacOS/bin"
+    "$HOME/Applications/Sparkle/bin"
+    "$HOME/Applications/Sparkle.app/Contents/MacOS/bin"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [ -x "$candidate/generate_keys" ] && [ -x "$candidate/sign_update" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+extract_public_key() {
+  local generate_keys_bin="$1/generate_keys"
+  local output
+  output="$($generate_keys_bin 2>&1)"
+
+  local extracted_key
+  extracted_key="$(printf '%s\n' "$output" | sed -n 's:.*<string>\(.*\)</string>.*:\1:p' | head -n 1)"
+
+  if [ -z "$extracted_key" ]; then
+    echo "error: 无法从 generate_keys 输出中解析 SUPublicEDKey"
+    printf '%s\n' "$output"
+    exit 1
+  fi
+
+  printf '%s\n' "$extracted_key"
+}
+
+resolve_public_key() {
+  if [ -n "$SPARKLE_PUBLIC_ED_KEY" ]; then
+    printf '%s\n' "$SPARKLE_PUBLIC_ED_KEY"
+    return 0
+  fi
+
+  local sparkle_bin
+  sparkle_bin="$(find_sparkle_bin_dir || true)"
+  if [ -z "$sparkle_bin" ]; then
+    echo "error: 未提供 SPARKLE_PUBLIC_ED_KEY，且未找到 Sparkle CLI（generate_keys / sign_update）"
+    echo "hint: 设置 SPARKLE_BIN_DIR 指向 Sparkle 分发包中的 bin 目录，或直接传入 SPARKLE_PUBLIC_ED_KEY"
+    exit 1
+  fi
+
+  extract_public_key "$sparkle_bin"
+}
+
+resolve_archive_signature() {
+  local archive_path="$1"
+
+  if [ -n "$SPARKLE_ED_SIGNATURE" ]; then
+    printf '%s\n' "$SPARKLE_ED_SIGNATURE"
+    return 0
+  fi
+
+  local sparkle_bin
+  sparkle_bin="$(find_sparkle_bin_dir || true)"
+  if [ -z "$sparkle_bin" ]; then
+    echo "error: 未提供 SPARKLE_ED_SIGNATURE，且未找到 Sparkle CLI（generate_keys / sign_update）"
+    echo "hint: 设置 SPARKLE_BIN_DIR 指向 Sparkle 分发包中的 bin 目录，或直接传入 SPARKLE_ED_SIGNATURE"
+    exit 1
+  fi
+
+  local output
+  output="$($sparkle_bin/sign_update "$archive_path" 2>&1)"
+
+  local extracted_signature
+  extracted_signature="$(printf '%s\n' "$output" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' | head -n 1)"
+
+  if [ -z "$extracted_signature" ]; then
+    echo "error: 无法从 sign_update 输出中解析 sparkle:edSignature"
+    printf '%s\n' "$output"
+    exit 1
+  fi
+
+  printf '%s\n' "$extracted_signature"
+}
+
+write_appcast() {
+  local target_path="$1"
+  local archive_length="$2"
+  local pub_date="$3"
+  local archive_signature="$4"
+
+  mkdir -p "$(dirname "$target_path")"
+
+  cat > "$target_path" <<APPCAST
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>v2rayE Changelog</title>
+        <link>https://github.com/$REPO_OWNER/$REPO_NAME/releases</link>
+        <description>v2rayE updates</description>
+        <language>en</language>
+        <item>
+            <title>Version $VERSION</title>
+            <pubDate>$pub_date</pubDate>
+            <sparkle:version>$BUILD_NUMBER</sparkle:version>
+            <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>$RELEASE_NOTES_URL</sparkle:releaseNotesLink>
+            <enclosure
+                url="$RELEASE_DOWNLOAD_URL"
+                sparkle:edSignature="$archive_signature"
+                length="$archive_length"
+                type="application/octet-stream" />
+        </item>
+    </channel>
+</rss>
+APPCAST
+}
+
+CORE_SOURCE="$(resolve_core_source || true)"
+SPARKLE_PUBLIC_ED_KEY="$(resolve_public_key)"
 
 cd "$ROOT_DIR"
 swift build -c release
 
-rm -rf "$APP_DIR" "$ZIP_PATH"
+rm -rf "$APP_DIR" "$ZIP_PATH" "$APPCAST_TEMPLATE_PATH"
 mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_ASSETS_DIR"
 
 cp "$BUILD_DIR/arm64-apple-macosx/release/v2rayE" "$APP_MACOS_DIR/v2rayE"
-cp "$CORE_SOURCE" "$APP_HELPERS_DIR/v2ray"
-cp "$PAC_SOURCE" "$APP_ASSETS_DIR/proxy.js"
+if [ -n "$CORE_SOURCE" ]; then
+  cp "$CORE_SOURCE" "$APP_HELPERS_DIR/v2ray"
+fi
+if [ -f "$PAC_SOURCE_PATH" ]; then
+  cp "$PAC_SOURCE_PATH" "$APP_ASSETS_DIR/proxy.js"
+else
+  write_default_pac "$APP_ASSETS_DIR/proxy.js"
+fi
 if [ -f "$ICON_SOURCE" ]; then
   cp "$ICON_SOURCE" "$APP_RESOURCES_DIR/AppIcon.icns"
 fi
 
-chmod +x "$APP_MACOS_DIR/v2rayE" "$APP_HELPERS_DIR/v2ray"
+chmod +x "$APP_MACOS_DIR/v2rayE"
+if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
+  chmod +x "$APP_HELPERS_DIR/v2ray"
+fi
 
 cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -88,22 +250,58 @@ cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>$(date +%Y%m%d%H%M)</string>
+    <string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>$APPCAST_URL</string>
+    <key>SUPublicEDKey</key>
+    <string>$SPARKLE_PUBLIC_ED_KEY</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>
 PLIST
 
-sign_bundle "$APP_HELPERS_DIR/v2ray"
+if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
+  sign_bundle "$APP_HELPERS_DIR/v2ray"
+fi
 sign_bundle "$APP_MACOS_DIR/v2rayE"
 /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP_DIR"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
 
+ARCHIVE_LENGTH="$(stat -f%z "$ZIP_PATH")"
+PUB_DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+SPARKLE_ED_SIGNATURE="$(resolve_archive_signature "$ZIP_PATH")"
+
+write_appcast "$APPCAST_TEMPLATE_PATH" "$ARCHIVE_LENGTH" "$PUB_DATE" "$SPARKLE_ED_SIGNATURE"
+write_appcast "$APPCAST_PUBLISH_PATH" "$ARCHIVE_LENGTH" "$PUB_DATE" "$SPARKLE_ED_SIGNATURE"
+
 echo "App bundle created: $APP_DIR"
 echo "Release zip created: $ZIP_PATH"
+echo "Appcast generated: $APPCAST_TEMPLATE_PATH"
+echo "Appcast synced to: $APPCAST_PUBLISH_PATH"
+echo "Public ED key: $SPARKLE_PUBLIC_ED_KEY"
+echo "Archive signature: $SPARKLE_ED_SIGNATURE"
+if [ -n "$CORE_SOURCE" ]; then
+  echo "Bundled core: $CORE_SOURCE"
+else
+  echo "Bundled core: skipped (app will discover system v2ray at runtime)"
+fi
+if [ -f "$PAC_SOURCE_PATH" ]; then
+  echo "Bundled PAC: $PAC_SOURCE_PATH"
+else
+  echo "Bundled PAC: generated default proxy.js"
+fi
+echo "Next: upload $(basename "$ZIP_PATH") to GitHub Release $RELEASE_TAG"

@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published var coreExecutablePath: String = "-"
     @Published var pacServerAddress: String = "-"
     @Published var latency: Int = -1
+    @Published var appVersion: String
     private var hasHandledLaunchAutoConnect = false
     private let latencyChecker = LatencyChecker()
 
@@ -26,19 +27,23 @@ final class AppModel: ObservableObject {
     .appendingPathComponent("proxy.js")
     private lazy var pacServer = PACServer(pacFileURL: pacFileURL)
     private let systemProxyManager = SystemProxyManager()
+    private let updateController: AppUpdateController
 
     init(
         configStore: ConfigStore = ConfigStore(),
         subscriptionService: SubscriptionService = SubscriptionService(),
-        configBuilder: V2RayConfigBuilder = V2RayConfigBuilder()
+        configBuilder: V2RayConfigBuilder = V2RayConfigBuilder(),
+        updateController: AppUpdateController? = nil
     ) {
         self.configStore = configStore
         self.subscriptionService = subscriptionService
         self.configBuilder = configBuilder
+        self.updateController = updateController ?? .shared
         self.coreRunner = CoreRunner(configStore: configStore)
         self.config = configStore.load()
         self.status = CoreStatus(state: .disconnected, message: "未连接")
         self.coreExecutablePath = configStore.discoverCoreExecutableURL()?.path ?? "-"
+        self.appVersion = Self.makeVersionString()
         self.pacServerAddress = pacServer.pacURLString
         
         // 应用启动时检查是否需要自动连接
@@ -208,6 +213,10 @@ final class AppModel: ObservableObject {
         status = CoreStatus(state: .disconnected, message: "已断开")
     }
 
+    func checkForUpdates() {
+        updateController.checkForUpdates()
+    }
+
     func quitApp() {
         coreRunner.stop()
         pacServer.stop()
@@ -290,5 +299,21 @@ final class AppModel: ObservableObject {
 
     private func persistConfig() {
         try? configStore.save(config)
+    }
+
+    private static func makeVersionString() -> String {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (shortVersion, buildVersion) {
+        case let (short?, build?) where !short.isEmpty && !build.isEmpty:
+            return "v\(short) (\(build))"
+        case let (short?, _):
+            return "v\(short)"
+        case let (_, build?):
+            return "build \(build)"
+        default:
+            return "-"
+        }
     }
 }

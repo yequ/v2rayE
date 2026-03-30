@@ -9,9 +9,15 @@ let package = Package(
     products: [
         .executable(name: "v2rayE", targets: ["v2rayE"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0")
+    ],
     targets: [
         .executableTarget(
             name: "v2rayE",
+            dependencies: [
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources",
             resources: [
                 .process("../Resources")
