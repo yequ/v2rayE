@@ -10,6 +10,7 @@ APP_DIR="$DIST_DIR/$APP_NAME"
 APP_CONTENTS_DIR="$APP_DIR/Contents"
 APP_MACOS_DIR="$APP_CONTENTS_DIR/MacOS"
 APP_HELPERS_DIR="$APP_CONTENTS_DIR/Helpers"
+APP_FRAMEWORKS_DIR="$APP_CONTENTS_DIR/Frameworks"
 APP_RESOURCES_DIR="$APP_CONTENTS_DIR/Resources"
 APP_ASSETS_DIR="$APP_RESOURCES_DIR/assets"
 ICON_SOURCE="$ROOT_DIR/Resources/AppIcon.icns"
@@ -22,6 +23,7 @@ RELEASE_NOTES_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/tag/$RELEA
 RELEASE_DOWNLOAD_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$RELEASE_TAG/$(basename "$ZIP_PATH")"
 APPCAST_TEMPLATE_PATH="$DIST_DIR/appcast.xml"
 APPCAST_PUBLISH_PATH="${APPCAST_PUBLISH_PATH:-$ROOT_DIR/appcast.xml}"
+SPARKLE_FRAMEWORK_SOURCE="$BUILD_DIR/arm64-apple-macosx/release/Sparkle.framework"
 BUILD_NUMBER="$(date +%Y%m%d%H%M)"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
 SPARKLE_ED_SIGNATURE="${SPARKLE_ED_SIGNATURE:-}"
@@ -69,6 +71,15 @@ PAC
 sign_bundle() {
   local target="$1"
   /usr/bin/codesign --force --sign - --timestamp=none "$target"
+}
+
+ensure_rpath() {
+  local binary_path="$1"
+  local rpath_value="$2"
+
+  if ! otool -l "$binary_path" | grep -q "$rpath_value"; then
+    install_name_tool -add_rpath "$rpath_value" "$binary_path"
+  fi
 }
 
 find_sparkle_bin_dir() {
@@ -206,7 +217,7 @@ cd "$ROOT_DIR"
 swift build -c release
 
 rm -rf "$APP_DIR" "$ZIP_PATH" "$APPCAST_TEMPLATE_PATH"
-mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_ASSETS_DIR"
+mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_FRAMEWORKS_DIR" "$APP_ASSETS_DIR"
 
 cp "$BUILD_DIR/arm64-apple-macosx/release/v2rayE" "$APP_MACOS_DIR/v2rayE"
 if [ -n "$CORE_SOURCE" ]; then
@@ -217,6 +228,9 @@ if [ -f "$PAC_SOURCE_PATH" ]; then
 else
   write_default_pac "$APP_ASSETS_DIR/proxy.js"
 fi
+if [ -d "$SPARKLE_FRAMEWORK_SOURCE" ]; then
+  cp -R "$SPARKLE_FRAMEWORK_SOURCE" "$APP_FRAMEWORKS_DIR/Sparkle.framework"
+fi
 if [ -f "$ICON_SOURCE" ]; then
   cp "$ICON_SOURCE" "$APP_RESOURCES_DIR/AppIcon.icns"
 fi
@@ -225,6 +239,7 @@ chmod +x "$APP_MACOS_DIR/v2rayE"
 if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
   chmod +x "$APP_HELPERS_DIR/v2ray"
 fi
+ensure_rpath "$APP_MACOS_DIR/v2rayE" "@executable_path/../Frameworks"
 
 cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -276,6 +291,9 @@ PLIST
 if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
   sign_bundle "$APP_HELPERS_DIR/v2ray"
 fi
+if [ -d "$APP_FRAMEWORKS_DIR/Sparkle.framework" ]; then
+  /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP_FRAMEWORKS_DIR/Sparkle.framework"
+fi
 sign_bundle "$APP_MACOS_DIR/v2rayE"
 /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP_DIR"
 
@@ -298,6 +316,11 @@ if [ -n "$CORE_SOURCE" ]; then
   echo "Bundled core: $CORE_SOURCE"
 else
   echo "Bundled core: skipped (app will discover system v2ray at runtime)"
+fi
+if [ -d "$APP_FRAMEWORKS_DIR/Sparkle.framework" ]; then
+  echo "Bundled Sparkle: $APP_FRAMEWORKS_DIR/Sparkle.framework"
+else
+  echo "Bundled Sparkle: missing"
 fi
 if [ -f "$PAC_SOURCE_PATH" ]; then
   echo "Bundled PAC: $PAC_SOURCE_PATH"
