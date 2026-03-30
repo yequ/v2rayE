@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
     @Published var latency: Int = -1
     @Published var appVersion: String
     private var hasHandledLaunchAutoConnect = false
+    private var applicationWillTerminateObserver: NSObjectProtocol?
     private let latencyChecker = LatencyChecker()
 
     private let configStore: ConfigStore
@@ -45,9 +46,24 @@ final class AppModel: ObservableObject {
         self.coreExecutablePath = configStore.discoverCoreExecutableURL()?.path ?? "-"
         self.appVersion = Self.makeVersionString()
         self.pacServerAddress = pacServer.pacURLString
-        
+        self.applicationWillTerminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleApplicationWillTerminate()
+            }
+        }
+
         // 应用启动时检查是否需要自动连接
         performAutoConnectIfNeeded()
+    }
+
+    deinit {
+        if let observer = applicationWillTerminateObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     var statusText: String {
@@ -218,18 +234,7 @@ final class AppModel: ObservableObject {
     }
 
     func quitApp() {
-        coreRunner.stop()
-        pacServer.stop()
-        latencyChecker.stopMonitoring()
-        
-        do {
-            try systemProxyManager.disableWebProxy()
-            try systemProxyManager.disableSOCKSProxy()
-            try systemProxyManager.disableAutoProxy()
-        } catch {
-            // 静默处理清理错误，不中断退出
-        }
-        
+        cleanupBeforeTermination()
         NSApp.terminate(nil)
     }
 
@@ -290,10 +295,28 @@ final class AppModel: ObservableObject {
         hasHandledLaunchAutoConnect = true
         guard config.autoConnectOnLaunch else { return }
         guard selectedNode != nil else { return }
-        
-        // 延遅执行，确保安全
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+
+        // 应用重启后旧内核进程可能还在退出，稍后再自动连接更稳妥。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.connect()
+        }
+    }
+
+    private func handleApplicationWillTerminate() {
+        cleanupBeforeTermination()
+    }
+
+    private func cleanupBeforeTermination() {
+        coreRunner.stop()
+        pacServer.stop()
+        latencyChecker.stopMonitoring()
+
+        do {
+            try systemProxyManager.disableWebProxy()
+            try systemProxyManager.disableSOCKSProxy()
+            try systemProxyManager.disableAutoProxy()
+        } catch {
+            // 静默处理清理错误，不中断退出
         }
     }
 

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 final class CoreRunner {
@@ -67,10 +68,26 @@ final class CoreRunner {
     }
 
     func stop() {
-        if let process = process, process.isRunning {
+        guard let process else { return }
+
+        if process.isRunning {
             process.terminate()
+            waitForProcessToExit(process, timeout: 1.0)
         }
-        process = nil
+
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            waitForProcessToExit(process, timeout: 0.3)
+        }
+
+        self.process = nil
+    }
+
+    private func waitForProcessToExit(_ process: Process, timeout: TimeInterval) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
     }
 
     private func ensureExecutablePermissionIfNeeded(for executableURL: URL) throws {
