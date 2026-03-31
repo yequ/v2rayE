@@ -15,7 +15,10 @@ final class AppModel: ObservableObject {
     @Published var appVersion: String
     private var hasHandledLaunchAutoConnect = false
     private var applicationWillTerminateObserver: NSObjectProtocol?
+    private var pendingLaunchAutoConnectWorkItem: DispatchWorkItem?
+    private var launchAutoConnectRetryIndex = 0
     private let latencyChecker = LatencyChecker()
+    private let launchAutoConnectRetryDelays: [TimeInterval] = [1.5, 3.0, 5.0]
 
     private let configStore: ConfigStore
     private let subscriptionService: SubscriptionService
@@ -130,6 +133,11 @@ final class AppModel: ObservableObject {
     }
 
     func connect() {
+        cancelLaunchAutoConnectRetry(resetRetryState: true)
+        connect(triggeredByLaunchAutoConnectRetry: false)
+    }
+
+    private func connect(triggeredByLaunchAutoConnectRetry: Bool) {
         guard let node = selectedNode else {
             status = CoreStatus(state: .failed, message: "请选择节点")
             return
@@ -144,21 +152,30 @@ final class AppModel: ObservableObject {
                 try systemProxyManager.setSOCKSProxy(host: "127.0.0.1", port: config.socksPort)
             }
         } catch {
-            status = CoreStatus(state: .failed, message: "设置系统代理失败：\(error.localizedDescription)")
+            handleConnectionFailure(
+                message: "设置系统代理失败：\(error.localizedDescription)",
+                triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+            )
             return
         }
 
         // PAC 模式检查 proxy.js 文件
         if config.proxyMode == .pac {
             guard FileManager.default.fileExists(atPath: pacFileURL.path) else {
-                status = CoreStatus(state: .failed, message: "PAC 文件不存在：\(pacFileURL.path)")
+                handleConnectionFailure(
+                    message: "PAC 文件不存在：\(pacFileURL.path)",
+                    triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+                )
                 return
             }
 
             do {
                 try pacServer.start()
             } catch {
-                status = CoreStatus(state: .failed, message: "PAC 服务启动失败：\(error.localizedDescription)")
+                handleConnectionFailure(
+                    message: "PAC 服务启动失败：\(error.localizedDescription)",
+                    triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+                )
                 return
             }
         } else {
@@ -198,34 +215,29 @@ final class AppModel: ObservableObject {
                 Thread.sleep(forTimeInterval: 0.5)
                 DispatchQueue.main.async {
                     if coreRunner.isRunning {
+                        self.cancelLaunchAutoConnectRetry(resetRetryState: true)
                         self.status = CoreStatus(state: .connected, message: "已连接：\(nodeName)")
                     } else {
-                        self.status = CoreStatus(state: .failed, message: "v2ray 启动失败，请检查节点配置和内核文件")
+                        self.handleConnectionFailure(
+                            message: "v2ray 启动失败，请检查节点配置和内核文件",
+                            triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+                        )
                     }
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.status = CoreStatus(state: .failed, message: error.localizedDescription)
+                    self.handleConnectionFailure(
+                        message: error.localizedDescription,
+                        triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+                    )
                 }
             }
         }
     }
 
     func disconnect() {
-        coreRunner.stop()
-        pacServer.stop()
-        latencyChecker.stopMonitoring()
-        latency = -1
-        
-        do {
-            try systemProxyManager.disableWebProxy()
-            try systemProxyManager.disableSOCKSProxy()
-            try systemProxyManager.disableAutoProxy()
-        } catch {
-            status = CoreStatus(state: .failed, message: "清理系统代理失败：\(error.localizedDescription)")
-            return
-        }
-        
+        cancelLaunchAutoConnectRetry(resetRetryState: true)
+        cleanupConnectionRuntimeState()
         status = CoreStatus(state: .disconnected, message: "已断开")
     }
 
@@ -296,10 +308,49 @@ final class AppModel: ObservableObject {
         guard config.autoConnectOnLaunch else { return }
         guard selectedNode != nil else { return }
 
-        // 应用重启后旧内核进程可能还在退出，稍后再自动连接更稳妥。
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.connect()
+        launchAutoConnectRetryIndex = 0
+        scheduleLaunchAutoConnectRetry(reason: "应用启动后正在恢复连接...")
+    }
+
+    private func scheduleLaunchAutoConnectRetry(reason: String) {
+        guard launchAutoConnectRetryIndex < launchAutoConnectRetryDelays.count else {
+            cancelLaunchAutoConnectRetry(resetRetryState: true)
+            status = CoreStatus(state: .failed, message: "自动连接失败，请稍后再试")
+            return
         }
+
+        let delay = launchAutoConnectRetryDelays[launchAutoConnectRetryIndex]
+        launchAutoConnectRetryIndex += 1
+        pendingLaunchAutoConnectWorkItem?.cancel()
+        status = CoreStatus(state: .connecting, message: reason)
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.connect(triggeredByLaunchAutoConnectRetry: true)
+        }
+        pendingLaunchAutoConnectWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func cancelLaunchAutoConnectRetry(resetRetryState: Bool) {
+        pendingLaunchAutoConnectWorkItem?.cancel()
+        pendingLaunchAutoConnectWorkItem = nil
+
+        if resetRetryState {
+            launchAutoConnectRetryIndex = 0
+        }
+    }
+
+    private func handleConnectionFailure(message: String, triggeredByLaunchAutoConnectRetry: Bool) {
+        cleanupConnectionRuntimeState()
+
+        if triggeredByLaunchAutoConnectRetry,
+           launchAutoConnectRetryIndex < launchAutoConnectRetryDelays.count {
+            scheduleLaunchAutoConnectRetry(reason: "升级重启后内核仍在恢复，正在自动重试...")
+            return
+        }
+
+        cancelLaunchAutoConnectRetry(resetRetryState: true)
+        status = CoreStatus(state: .failed, message: message)
     }
 
     private func handleApplicationWillTerminate() {
@@ -307,16 +358,22 @@ final class AppModel: ObservableObject {
     }
 
     private func cleanupBeforeTermination() {
+        cancelLaunchAutoConnectRetry(resetRetryState: true)
+        cleanupConnectionRuntimeState()
+    }
+
+    private func cleanupConnectionRuntimeState() {
         coreRunner.stop()
         pacServer.stop()
         latencyChecker.stopMonitoring()
+        latency = -1
 
         do {
             try systemProxyManager.disableWebProxy()
             try systemProxyManager.disableSOCKSProxy()
             try systemProxyManager.disableAutoProxy()
         } catch {
-            // 静默处理清理错误，不中断退出
+            // 静默处理清理错误，不中断当前流程
         }
     }
 

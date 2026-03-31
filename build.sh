@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-1.0.3}"
+VERSION="${1:-1.0.4}"
 BUILD_DIR="$ROOT_DIR/.build"
 DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="v2rayE.app"
