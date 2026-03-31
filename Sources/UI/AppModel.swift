@@ -13,8 +13,11 @@ final class AppModel: ObservableObject {
     @Published var pacServerAddress: String = "-"
     @Published var latency: Int = -1
     @Published var appVersion: String
+    @Published var updateStatusMessage: String?
     private var hasHandledLaunchAutoConnect = false
     private var applicationWillTerminateObserver: NSObjectProtocol?
+    private var updateStatusObserver: NSObjectProtocol?
+    private var updateStatusClearWorkItem: DispatchWorkItem?
     private var pendingLaunchAutoConnectWorkItem: DispatchWorkItem?
     private var launchAutoConnectRetryIndex = 0
     private let latencyChecker = LatencyChecker()
@@ -58,6 +61,16 @@ final class AppModel: ObservableObject {
                 self?.handleApplicationWillTerminate()
             }
         }
+        self.updateStatusObserver = NotificationCenter.default.addObserver(
+            forName: .appUpdateStatusDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let status = notification.object as? AppUpdateStatus else { return }
+            Task { @MainActor [weak self] in
+                self?.handleUpdateStatus(status)
+            }
+        }
 
         // 应用启动时检查是否需要自动连接
         performAutoConnectIfNeeded()
@@ -67,6 +80,10 @@ final class AppModel: ObservableObject {
         if let observer = applicationWillTerminateObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = updateStatusObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        updateStatusClearWorkItem?.cancel()
     }
 
     var statusText: String {
@@ -351,6 +368,20 @@ final class AppModel: ObservableObject {
 
         cancelLaunchAutoConnectRetry(resetRetryState: true)
         status = CoreStatus(state: .failed, message: message)
+    }
+
+    private func handleUpdateStatus(_ status: AppUpdateStatus) {
+        updateStatusClearWorkItem?.cancel()
+        updateStatusMessage = status.message
+
+        guard status.isTransient else { return }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard self?.updateStatusMessage == status.message else { return }
+            self?.updateStatusMessage = nil
+        }
+        updateStatusClearWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: workItem)
     }
 
     private func handleApplicationWillTerminate() {

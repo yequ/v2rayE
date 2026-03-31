@@ -164,6 +164,13 @@ struct ContentView: View {
                             compactChip(icon: "gauge.with.dots.needle.33percent", text: "\(appModel.latency) ms")
                         }
                     }
+
+                    if let updateStatusMessage = appModel.updateStatusMessage {
+                        Label(updateStatusMessage, systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
 
                 Spacer(minLength: 8)

@@ -1,19 +1,29 @@
 import AppKit
+import Foundation
 import Sparkle
 
+extension Notification.Name {
+    static let appUpdateStatusDidChange = Notification.Name("AppUpdateStatusDidChange")
+}
+
+struct AppUpdateStatus {
+    let message: String
+    let isTransient: Bool
+}
+
 @MainActor
-final class AppUpdateController {
+final class AppUpdateController: NSObject, SPUUpdaterDelegate {
     static let shared = AppUpdateController()
 
-    private let updaterController: SPUStandardUpdaterController
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: false,
+        updaterDelegate: self,
+        userDriverDelegate: nil
+    )
     private let automaticUpdateInterval: TimeInterval = 24 * 60 * 60
 
-    private init() {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: false,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
+    private override init() {
+        super.init()
     }
 
     func start() {
@@ -34,6 +44,7 @@ final class AppUpdateController {
             let updater = self.updaterController.updater
             guard updater.automaticallyChecksForUpdates else { return }
 
+            self.postStatus(message: "正在后台检查更新...", isTransient: true)
             updater.checkForUpdatesInBackground()
             updater.resetUpdateCycle()
         }
@@ -122,6 +133,45 @@ final class AppUpdateController {
         alert.informativeText = "请先在应用配置中填入有效的 SUPublicEDKey，并发布可访问的 appcast.xml。"
         alert.addButton(withTitle: "知道了")
         alert.runModal()
+    }
+
+    private func postStatus(message: String, isTransient: Bool) {
+        NotificationCenter.default.post(
+            name: .appUpdateStatusDidChange,
+            object: AppUpdateStatus(message: message, isTransient: isTransient)
+        )
+    }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
+        postStatus(message: "发现新版本 \(version)，正在准备下载...", isTransient: false)
+    }
+
+    func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+        let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
+        postStatus(message: "发现新版本 \(version)，正在后台下载...", isTransient: false)
+    }
+
+    func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
+        let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
+        postStatus(message: "新版本 \(version) 已下载完成，稍后可安装", isTransient: false)
+    }
+
+    func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
+        postStatus(message: "更新下载失败：\(error.localizedDescription)", isTransient: false)
+    }
+
+    func userDidCancelDownload(_ updater: SPUUpdater) {
+        postStatus(message: "已取消更新下载", isTransient: true)
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        let userInitiated = (error as NSError).userInfo["SPUNoUpdateFoundUserInitiatedKey"] as? Bool ?? false
+        postStatus(message: userInitiated ? "当前已是最新版本" : "启动时已检查更新，当前已是最新版本", isTransient: true)
+    }
+
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        postStatus(message: "更新即将安装，应用将重新启动", isTransient: false)
     }
 }
 
