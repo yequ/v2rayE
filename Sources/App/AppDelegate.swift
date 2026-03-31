@@ -6,6 +6,7 @@ final class AppUpdateController {
     static let shared = AppUpdateController()
 
     private let updaterController: SPUStandardUpdaterController
+    private let automaticUpdateInterval: TimeInterval = 24 * 60 * 60
 
     private init() {
         updaterController = SPUStandardUpdaterController(
@@ -17,7 +18,25 @@ final class AppUpdateController {
 
     func start() {
         guard canUseUpdater else { return }
+
+        let updater = updaterController.updater
+        updater.automaticallyChecksForUpdates = true
+        updater.updateCheckInterval = automaticUpdateInterval
+        if updater.allowsAutomaticUpdates {
+            updater.automaticallyDownloadsUpdates = true
+        }
+
         updaterController.startUpdater()
+
+        // Sparkle 建议在启动 updater 后的下一次 runloop 中触发启动检查。
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let updater = self.updaterController.updater
+            guard updater.automaticallyChecksForUpdates else { return }
+
+            updater.checkForUpdatesInBackground()
+            updater.resetUpdateCycle()
+        }
     }
 
     func checkForUpdates() {
