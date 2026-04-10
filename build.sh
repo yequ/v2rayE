@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-1.0.7}"
+VERSION="${1:-1.0.8}"
 BUILD_DIR="$ROOT_DIR/.build"
 DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="v2rayE.app"
@@ -33,8 +33,14 @@ APP_SUPPORT_DIR="$HOME/Library/Application Support/v2rayE"
 PAC_SOURCE_PATH="${PAC_SOURCE_PATH:-$APP_SUPPORT_DIR/proxy.js}"
 CORE_SOURCE_PATH="${CORE_SOURCE_PATH:-}"
 CORE_SOURCE_CANDIDATES=(
+  "$APP_SUPPORT_DIR/core/xray"
+  "$APP_SUPPORT_DIR/core/xray/xray"
   "$APP_SUPPORT_DIR/core/v2ray"
   "$APP_SUPPORT_DIR/core/v2ray/v2ray"
+  "/opt/homebrew/bin/xray"
+  "/usr/local/bin/xray"
+  "/opt/homebrew/bin/v2ray"
+  "/usr/local/bin/v2ray"
 )
 
 resolve_core_source() {
@@ -220,8 +226,10 @@ rm -rf "$APP_DIR" "$ZIP_PATH" "$APPCAST_TEMPLATE_PATH"
 mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_FRAMEWORKS_DIR" "$APP_ASSETS_DIR"
 
 cp "$BUILD_DIR/arm64-apple-macosx/release/v2rayE" "$APP_MACOS_DIR/v2rayE"
+BUNDLED_CORE_NAME=""
 if [ -n "$CORE_SOURCE" ]; then
-  cp "$CORE_SOURCE" "$APP_HELPERS_DIR/v2ray"
+  BUNDLED_CORE_NAME="$(basename "$CORE_SOURCE")"
+  cp "$CORE_SOURCE" "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
 fi
 if [ -f "$PAC_SOURCE_PATH" ]; then
   cp "$PAC_SOURCE_PATH" "$APP_ASSETS_DIR/proxy.js"
@@ -236,8 +244,8 @@ if [ -f "$ICON_SOURCE" ]; then
 fi
 
 chmod +x "$APP_MACOS_DIR/v2rayE"
-if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
-  chmod +x "$APP_HELPERS_DIR/v2ray"
+if [ -n "$BUNDLED_CORE_NAME" ] && [ -f "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME" ]; then
+  chmod +x "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
 fi
 ensure_rpath "$APP_MACOS_DIR/v2rayE" "@executable_path/../Frameworks"
 
@@ -288,8 +296,8 @@ cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if [ -f "$APP_HELPERS_DIR/v2ray" ]; then
-  sign_bundle "$APP_HELPERS_DIR/v2ray"
+if [ -n "$BUNDLED_CORE_NAME" ] && [ -f "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME" ]; then
+  sign_bundle "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
 fi
 if [ -d "$APP_FRAMEWORKS_DIR/Sparkle.framework" ]; then
   /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP_FRAMEWORKS_DIR/Sparkle.framework"

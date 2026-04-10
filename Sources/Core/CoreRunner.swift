@@ -36,6 +36,7 @@ final class CoreRunner {
 
             var environment = ProcessInfo.processInfo.environment
             environment["v2ray.location.asset"] = configStore.coreAssetsDirectoryURL().path
+            environment["xray.location.asset"] = configStore.coreAssetsDirectoryURL().path
             process.environment = environment
 
             self.process = process
@@ -130,13 +131,13 @@ enum CoreRunnerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .coreNotInstalled(let path):
-            return "未找到 v2ray 内核，请将可执行文件放到 \(path)"
+            return "未找到可用代理内核，请将 xray 或 v2ray 可执行文件放到 \(path)"
         case .corePermissionDenied(let path):
-            return "v2ray 没有执行权限，请执行 chmod +x \"\(path)\""
+            return "代理内核没有执行权限，请执行 chmod +x \"\(path)\""
         case .configFileMissing(let path):
             return "配置文件丢失：\(path)"
         case .coreLaunchFailed(let reason):
-            return "v2ray 启动失败：\(reason)"
+            return "代理内核启动失败：\(reason)"
         }
     }
 }

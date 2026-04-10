@@ -160,6 +160,15 @@ final class AppModel: ObservableObject {
             return
         }
 
+        if node.proxyProtocol == .vless,
+           configStore.discoverCoreType() != .xray {
+            handleConnectionFailure(
+                message: "当前节点为 VLESS/Reality，需使用 Xray 内核。请安装 xray，或打包时内置 xray 后再连接。",
+                triggeredByLaunchAutoConnectRetry: triggeredByLaunchAutoConnectRetry
+            )
+            return
+        }
+
         // 设置系统代理
         do {
             if config.proxyMode == .pac {

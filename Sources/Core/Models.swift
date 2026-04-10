@@ -1,6 +1,7 @@
 import Foundation
 
 enum ProxyCoreType: String, Codable, CaseIterable, Identifiable {
+    case xray
     case v2ray
 
     var id: String { rawValue }

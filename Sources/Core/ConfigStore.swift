@@ -4,6 +4,7 @@ final class ConfigStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let fileManager = FileManager.default
+    private let preferredCoreNames = ["xray", "v2ray"]
 
     private let supportRootURL: URL
     private let configURL: URL
@@ -47,26 +48,30 @@ final class ConfigStore {
     }
 
     func coreExecutableURL() -> URL {
-        coreDirectoryURL.appendingPathComponent("v2ray")
+        coreExecutableURL(named: preferredCoreNames[0])
     }
 
     func discoverCoreExecutableURL() -> URL? {
-        let defaultURL = coreExecutableURL()
-
-        if fileExists(at: defaultURL) && isFile(at: defaultURL) {
-            return defaultURL
+        for url in bundledCoreExecutableURLs() where isFile(at: url) {
+            return url
         }
 
-        let dirV2rayURL = defaultURL.appendingPathComponent("v2ray")
-        if fileExists(at: dirV2rayURL) && isFile(at: dirV2rayURL) {
-            return dirV2rayURL
-        }
+        for name in preferredCoreNames {
+            let directURL = coreExecutableURL(named: name)
+            if fileExists(at: directURL) && isFile(at: directURL) {
+                return directURL
+            }
 
-        if fileExists(at: defaultURL) {
-            return defaultURL
+            let nestedURL = directURL.appendingPathComponent(name)
+            if fileExists(at: nestedURL) && isFile(at: nestedURL) {
+                return nestedURL
+            }
         }
 
         let searchPaths: [URL] = [
+            URL(fileURLWithPath: "/opt/homebrew/bin/xray"),
+            URL(fileURLWithPath: "/usr/local/bin/xray"),
+            URL(fileURLWithPath: "/usr/bin/xray"),
             URL(fileURLWithPath: "/usr/local/bin/v2ray"),
             URL(fileURLWithPath: "/opt/homebrew/bin/v2ray"),
             URL(fileURLWithPath: "/usr/bin/v2ray")
@@ -80,6 +85,25 @@ final class ConfigStore {
         }
 
         return nil
+    }
+
+    func discoverCoreType() -> ProxyCoreType? {
+        guard let executableURL = discoverCoreExecutableURL() else {
+            return nil
+        }
+
+        switch executableURL.lastPathComponent.lowercased() {
+        case "xray":
+            return .xray
+        case "v2ray":
+            return .v2ray
+        default:
+            return nil
+        }
+    }
+
+    private func coreExecutableURL(named name: String) -> URL {
+        coreDirectoryURL.appendingPathComponent(name)
     }
 
     private func fileExists(at url: URL) -> Bool {
@@ -104,6 +128,10 @@ final class ConfigStore {
 
     private func searchInCommonInstallLocations() -> URL? {
         let possibleDirectories = [
+            "/usr/local/xray",
+            "/opt/xray",
+            "~/Applications/xray",
+            "/Applications/xray.app/Contents/MacOS",
             "/usr/local/v2ray",
             "/opt/v2ray",
             "~/Applications/v2ray",
@@ -112,17 +140,22 @@ final class ConfigStore {
 
         for directory in possibleDirectories {
             let expandedPath = (directory as NSString).expandingTildeInPath
-            let v2rayURL = URL(fileURLWithPath: expandedPath).appendingPathComponent("v2ray")
-            if fileManager.fileExists(atPath: v2rayURL.path) {
-                return v2rayURL
+            for name in preferredCoreNames {
+                let coreURL = URL(fileURLWithPath: expandedPath).appendingPathComponent(name)
+                if fileManager.fileExists(atPath: coreURL.path) {
+                    return coreURL
+                }
             }
         }
 
         if let home = fileManager.homeDirectoryForCurrentUser.path.removingPercentEncoding {
-            let homeV2ray = URL(fileURLWithPath: home)
-                .appendingPathComponent(".local/bin/v2ray")
-            if fileManager.fileExists(atPath: homeV2ray.path) {
-                return homeV2ray
+            for name in preferredCoreNames {
+                let homeCore = URL(fileURLWithPath: home)
+                    .appendingPathComponent(".local/bin")
+                    .appendingPathComponent(name)
+                if fileManager.fileExists(atPath: homeCore.path) {
+                    return homeCore
+                }
             }
         }
 
@@ -148,7 +181,8 @@ final class ConfigStore {
         let targetPACURL = supportRootURL.appendingPathComponent("proxy.js")
 
         if let packagedCoreURL {
-            try copyFileIfNeeded(from: packagedCoreURL, to: coreExecutableURL(), executable: true)
+            let targetCoreURL = coreExecutableURL(named: packagedCoreURL.lastPathComponent)
+            try copyFileIfNeeded(from: packagedCoreURL, to: targetCoreURL, executable: true)
         }
         try copyFileIfNeeded(from: packagedPACURL, to: targetPACURL, executable: false)
     }
@@ -175,16 +209,32 @@ final class ConfigStore {
         let executableURL = Bundle.main.executableURL ?? fallbackExecutableURL
         let executableDirectoryURL = executableURL.deletingLastPathComponent()
 
-        let candidates = [
-            packagedAssetsURL.appendingPathComponent("core", isDirectory: true).appendingPathComponent("v2ray"),
+        let candidates = preferredCoreNames.flatMap { name in
+            [
+                packagedAssetsURL.appendingPathComponent("core", isDirectory: true).appendingPathComponent(name),
+                executableDirectoryURL
+                    .appendingPathComponent("..", isDirectory: true)
+                    .appendingPathComponent("Helpers", isDirectory: true)
+                    .appendingPathComponent(name)
+                    .standardizedFileURL
+            ]
+        }
+
+        return candidates.first(where: { isFile(at: $0) })
+    }
+
+    private func bundledCoreExecutableURLs() -> [URL] {
+        let fallbackExecutableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        let executableURL = Bundle.main.executableURL ?? fallbackExecutableURL
+        let executableDirectoryURL = executableURL.deletingLastPathComponent()
+
+        return preferredCoreNames.map { name in
             executableDirectoryURL
                 .appendingPathComponent("..", isDirectory: true)
                 .appendingPathComponent("Helpers", isDirectory: true)
-                .appendingPathComponent("v2ray")
+                .appendingPathComponent(name)
                 .standardizedFileURL
-        ]
-
-        return candidates.first(where: { isFile(at: $0) })
+        }
     }
 
     private func copyFileIfNeeded(from sourceURL: URL, to destinationURL: URL, executable: Bool) throws {
