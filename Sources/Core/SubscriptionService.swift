@@ -27,10 +27,23 @@ final class SubscriptionService {
             return plain
         }
 
-        if let encoded = String(data: data, encoding: .utf8),
-           let decodedData = Data(base64Encoded: encoded.replacingOccurrences(of: "\n", with: "")),
-           let decoded = String(data: decodedData, encoding: .utf8) {
-            return decoded
+        if let encoded = String(data: data, encoding: .utf8) {
+            let normalized = normalizeSubscriptionBase64(encoded)
+
+            if let decodedData = Data(base64Encoded: normalized),
+               let decoded = String(data: decodedData, encoding: .utf8) {
+                return decoded
+            }
+
+            let urlSafeNormalized = normalizeBase64(
+                normalized
+                    .replacingOccurrences(of: "-", with: "+")
+                    .replacingOccurrences(of: "_", with: "/")
+            )
+            if let decodedData = Data(base64Encoded: urlSafeNormalized),
+               let decoded = String(data: decodedData, encoding: .utf8) {
+                return decoded
+            }
         }
 
         return String(decoding: data, as: UTF8.self)
@@ -155,6 +168,13 @@ final class SubscriptionService {
             headerHost: headerHost,
             headerPath: headerPath
         )
+    }
+
+    private func normalizeSubscriptionBase64(_ raw: String) -> String {
+        let compact = raw
+            .components(separatedBy: .whitespacesAndNewlines)
+            .joined()
+        return normalizeBase64(compact)
     }
 
     private func normalizeBase64(_ raw: String) -> String {
