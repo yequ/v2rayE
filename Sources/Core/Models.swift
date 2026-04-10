@@ -29,6 +29,11 @@ enum ProxyMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ProxyProtocol: String, Codable {
+    case vmess
+    case vless
+}
+
 
 struct SubscriptionProfile: Identifiable, Codable, Equatable {
     var id: UUID
@@ -56,6 +61,15 @@ struct ProxyNode: Identifiable, Codable, Equatable {
     var security: String
     var network: String
     var remark: String
+    var proxyProtocol: ProxyProtocol
+    // VLESS 特有参数
+    var flow: String
+    var sni: String
+    var alpn: String
+    var fingerprint: String
+    var publicKey: String
+    var headerHost: String
+    var headerPath: String
 
     init(
         id: UUID = UUID(),
@@ -66,7 +80,15 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         alterId: Int = 0,
         security: String = "auto",
         network: String = "tcp",
-        remark: String = ""
+        remark: String = "",
+        proxyProtocol: ProxyProtocol = .vmess,
+        flow: String = "",
+        sni: String = "",
+        alpn: String = "",
+        fingerprint: String = "",
+        publicKey: String = "",
+        headerHost: String = "",
+        headerPath: String = ""
     ) {
         self.id = id
         self.name = name
@@ -77,6 +99,14 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         self.security = security
         self.network = network
         self.remark = remark
+        self.proxyProtocol = proxyProtocol
+        self.flow = flow
+        self.sni = sni
+        self.alpn = alpn
+        self.fingerprint = fingerprint
+        self.publicKey = publicKey
+        self.headerHost = headerHost
+        self.headerPath = headerPath
     }
 }
 
