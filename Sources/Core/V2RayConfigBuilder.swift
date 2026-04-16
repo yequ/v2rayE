@@ -1,7 +1,13 @@
 import Foundation
 
 final class V2RayConfigBuilder {
-    func build(for node: ProxyNode, socksPort: Int, httpPort: Int, proxyMode: ProxyMode) throws -> Data {
+    func build(
+        for node: ProxyNode,
+        socksPort: Int,
+        httpPort: Int,
+        listenAddress: String,
+        proxyMode: ProxyMode
+    ) throws -> Data {
         let outbound = buildOutbound(for: node)
 
         let payload: [String: Any] = [
@@ -12,7 +18,7 @@ final class V2RayConfigBuilder {
                 [
                     "tag": "socks-in",
                     "port": socksPort,
-                    "listen": "127.0.0.1",
+                    "listen": listenAddress,
                     "protocol": "socks",
                     "settings": [
                         "auth": "noauth",
@@ -26,7 +32,7 @@ final class V2RayConfigBuilder {
                 [
                     "tag": "http-in",
                     "port": httpPort,
-                    "listen": "127.0.0.1",
+                    "listen": listenAddress,
                     "protocol": "http",
                     "settings": [:]
                 ]

@@ -96,6 +96,7 @@ struct ContentView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var httpPortText = "1087"
     @State private var socksPortText = "1080"
+    @State private var selectedProxyBindScope: ProxyBindScope = .loopback
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -112,6 +113,7 @@ struct ContentView: View {
         .onAppear {
             httpPortText = String(appModel.config.httpPort)
             socksPortText = String(appModel.config.socksPort)
+            selectedProxyBindScope = appModel.config.proxyBindScope
         }
     }
 
@@ -293,6 +295,8 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 compactInfoRow(title: "内核", value: appModel.coreExecutablePath, tint: .orange)
 
+                compactInfoRow(title: "监听", value: appModel.config.proxyBindScope.listenAddress, tint: .pink)
+
                 if appModel.config.proxyMode == .pac {
                     compactInfoRow(title: "PAC", value: appModel.pacServerAddress, tint: .purple)
                 }
@@ -308,13 +312,31 @@ struct ContentView: View {
                     compactInputField("SOCKS5", text: $socksPortText)
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("监听范围")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Picker("监听范围", selection: $selectedProxyBindScope) {
+                        ForEach(ProxyBindScope.allCases) { scope in
+                            Text(scope.displayName).tag(scope)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(selectedProxyBindScope.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Button {
                     appModel.updatePorts(
                         httpPort: Int(httpPortText) ?? 1087,
-                        socksPort: Int(socksPortText) ?? 1080
+                        socksPort: Int(socksPortText) ?? 1080,
+                        proxyBindScope: selectedProxyBindScope
                     )
                 } label: {
-                    Label("保存端口", systemImage: "checkmark.circle.fill")
+                    Label("保存代理设置", systemImage: "checkmark.circle.fill")
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)

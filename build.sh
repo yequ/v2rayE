@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-1.0.8}"
+VERSION="${1:-1.0.9}"
 BUILD_DIR="$ROOT_DIR/.build"
 DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="v2rayE.app"
@@ -58,6 +58,37 @@ resolve_core_source() {
   done
 
   return 1
+}
+
+collect_core_sources() {
+  local sources=()
+
+  if [ -n "$CORE_SOURCE_PATH" ] && [ -f "$CORE_SOURCE_PATH" ]; then
+    sources+=("$CORE_SOURCE_PATH")
+  fi
+
+  local candidate candidate_name existing_source existing_name duplicate_found
+  for candidate in "${CORE_SOURCE_CANDIDATES[@]}"; do
+    if [ ! -f "$candidate" ]; then
+      continue
+    fi
+
+    candidate_name="$(basename "$candidate")"
+    duplicate_found=0
+    for existing_source in "${sources[@]}"; do
+      existing_name="$(basename "$existing_source")"
+      if [ "$existing_name" = "$candidate_name" ]; then
+        duplicate_found=1
+        break
+      fi
+    done
+
+    if [ "$duplicate_found" -eq 0 ]; then
+      sources+=("$candidate")
+    fi
+  done
+
+  printf '%s\n' "${sources[@]}"
 }
 
 write_default_pac() {
@@ -217,6 +248,12 @@ APPCAST
 }
 
 CORE_SOURCE="$(resolve_core_source || true)"
+CORE_SOURCES=()
+while IFS= read -r core_source; do
+  if [ -n "$core_source" ]; then
+    CORE_SOURCES+=("$core_source")
+  fi
+done < <(collect_core_sources)
 SPARKLE_PUBLIC_ED_KEY="$(resolve_public_key)"
 
 cd "$ROOT_DIR"
@@ -226,11 +263,12 @@ rm -rf "$APP_DIR" "$ZIP_PATH" "$APPCAST_TEMPLATE_PATH"
 mkdir -p "$APP_MACOS_DIR" "$APP_HELPERS_DIR" "$APP_FRAMEWORKS_DIR" "$APP_ASSETS_DIR"
 
 cp "$BUILD_DIR/arm64-apple-macosx/release/v2rayE" "$APP_MACOS_DIR/v2rayE"
-BUNDLED_CORE_NAME=""
-if [ -n "$CORE_SOURCE" ]; then
-  BUNDLED_CORE_NAME="$(basename "$CORE_SOURCE")"
-  cp "$CORE_SOURCE" "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
-fi
+BUNDLED_CORE_NAMES=()
+for core_source in "${CORE_SOURCES[@]}"; do
+  bundled_core_name="$(basename "$core_source")"
+  cp "$core_source" "$APP_HELPERS_DIR/$bundled_core_name"
+  BUNDLED_CORE_NAMES+=("$bundled_core_name")
+done
 if [ -f "$PAC_SOURCE_PATH" ]; then
   cp "$PAC_SOURCE_PATH" "$APP_ASSETS_DIR/proxy.js"
 else
@@ -244,9 +282,11 @@ if [ -f "$ICON_SOURCE" ]; then
 fi
 
 chmod +x "$APP_MACOS_DIR/v2rayE"
-if [ -n "$BUNDLED_CORE_NAME" ] && [ -f "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME" ]; then
-  chmod +x "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
-fi
+for bundled_core_name in "${BUNDLED_CORE_NAMES[@]}"; do
+  if [ -f "$APP_HELPERS_DIR/$bundled_core_name" ]; then
+    chmod +x "$APP_HELPERS_DIR/$bundled_core_name"
+  fi
+done
 ensure_rpath "$APP_MACOS_DIR/v2rayE" "@executable_path/../Frameworks"
 
 cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
@@ -296,9 +336,11 @@ cat > "$APP_CONTENTS_DIR/Info.plist" <<PLIST
 </plist>
 PLIST
 
-if [ -n "$BUNDLED_CORE_NAME" ] && [ -f "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME" ]; then
-  sign_bundle "$APP_HELPERS_DIR/$BUNDLED_CORE_NAME"
-fi
+for bundled_core_name in "${BUNDLED_CORE_NAMES[@]}"; do
+  if [ -f "$APP_HELPERS_DIR/$bundled_core_name" ]; then
+    sign_bundle "$APP_HELPERS_DIR/$bundled_core_name"
+  fi
+done
 if [ -d "$APP_FRAMEWORKS_DIR/Sparkle.framework" ]; then
   /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP_FRAMEWORKS_DIR/Sparkle.framework"
 fi
@@ -320,8 +362,9 @@ echo "Appcast generated: $APPCAST_TEMPLATE_PATH"
 echo "Appcast synced to: $APPCAST_PUBLISH_PATH"
 echo "Public ED key: $SPARKLE_PUBLIC_ED_KEY"
 echo "Archive signature: $SPARKLE_ED_SIGNATURE"
-if [ -n "$CORE_SOURCE" ]; then
-  echo "Bundled core: $CORE_SOURCE"
+if [ ${#BUNDLED_CORE_NAMES[@]} -gt 0 ]; then
+  echo "Bundled cores: ${BUNDLED_CORE_NAMES[*]}"
+  echo "Primary core: ${CORE_SOURCE:-none}"
 else
   echo "Bundled core: skipped (app will discover system v2ray at runtime)"
 fi

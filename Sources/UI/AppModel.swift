@@ -224,6 +224,7 @@ final class AppModel: ObservableObject {
         let socksPort = self.config.socksPort
         let httpPort = self.config.httpPort
         let proxyMode = self.config.proxyMode
+        let listenAddress = self.config.proxyBindScope.listenAddress
         let nodeName = node.name
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -233,6 +234,7 @@ final class AppModel: ObservableObject {
                     for: node,
                     socksPort: socksPort,
                     httpPort: httpPort,
+                    listenAddress: listenAddress,
                     proxyMode: proxyMode
                 )
                 let url = try configStore.saveGeneratedCoreConfig(configData)
@@ -298,11 +300,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updatePorts(httpPort: Int, socksPort: Int) {
+    func updatePorts(httpPort: Int, socksPort: Int, proxyBindScope: ProxyBindScope) {
         config.httpPort = httpPort
         config.socksPort = socksPort
+        config.proxyBindScope = proxyBindScope
         persistConfig()
-        status = CoreStatus(state: .disconnected, message: "端口已更新：HTTP \(httpPort)，SOCKS5 \(socksPort)")
+        status = CoreStatus(
+            state: .disconnected,
+            message: "代理已更新：\(proxyBindScope.displayName)，HTTP \(httpPort)，SOCKS5 \(socksPort)"
+        )
         if coreRunner.isRunning {
             disconnect()
             connect()

@@ -176,11 +176,11 @@ final class ConfigStore {
             return
         }
 
-        let packagedCoreURL = packagedCoreExecutableURL(from: packagedAssetsURL)
+        let packagedCoreURLs = packagedCoreExecutableURLs(from: packagedAssetsURL)
         let packagedPACURL = packagedAssetsURL.appendingPathComponent("proxy.js")
         let targetPACURL = supportRootURL.appendingPathComponent("proxy.js")
 
-        if let packagedCoreURL {
+        for packagedCoreURL in packagedCoreURLs {
             let targetCoreURL = coreExecutableURL(named: packagedCoreURL.lastPathComponent)
             try copyFileIfNeeded(from: packagedCoreURL, to: targetCoreURL, executable: true)
         }
@@ -204,13 +204,13 @@ final class ConfigStore {
         return candidates.first(where: { isDirectory(at: $0) })
     }
 
-    private func packagedCoreExecutableURL(from packagedAssetsURL: URL) -> URL? {
+    private func packagedCoreExecutableURLs(from packagedAssetsURL: URL) -> [URL] {
         let fallbackExecutableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         let executableURL = Bundle.main.executableURL ?? fallbackExecutableURL
         let executableDirectoryURL = executableURL.deletingLastPathComponent()
 
-        let candidates = preferredCoreNames.flatMap { name in
-            [
+        return preferredCoreNames.compactMap { name in
+            let candidates = [
                 packagedAssetsURL.appendingPathComponent("core", isDirectory: true).appendingPathComponent(name),
                 executableDirectoryURL
                     .appendingPathComponent("..", isDirectory: true)
@@ -218,9 +218,9 @@ final class ConfigStore {
                     .appendingPathComponent(name)
                     .standardizedFileURL
             ]
-        }
 
-        return candidates.first(where: { isFile(at: $0) })
+            return candidates.first(where: { isFile(at: $0) })
+        }
     }
 
     private func bundledCoreExecutableURLs() -> [URL] {
