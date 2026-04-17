@@ -8,16 +8,16 @@
         <description>v2rayE updates</description>
         <language>en</language>
         <item>
-            <title>Version 1.0.9</title>
-            <pubDate>Thu, 16 Apr 2026 08:05:50 +0000</pubDate>
-            <sparkle:version>202604161605</sparkle:version>
-            <sparkle:shortVersionString>1.0.9</sparkle:shortVersionString>
+            <title>Version 1.0.10</title>
+            <pubDate>Fri, 17 Apr 2026 08:12:54 +0000</pubDate>
+            <sparkle:version>202604171612</sparkle:version>
+            <sparkle:shortVersionString>1.0.10</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://github.com/yequ/v2rayE/releases/tag/v1.0.9</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink>https://github.com/yequ/v2rayE/releases/tag/v1.0.10</sparkle:releaseNotesLink>
             <enclosure
-                url="https://github.com/yequ/v2rayE/releases/download/v1.0.9/v2rayE-macos-1.0.9.zip"
-                sparkle:edSignature="2gg0PFOYArvPUUdwCV25qHucl+NRGd0+rME5gJYow4ad+lnFI/6V0Pc0FGrk8WyZ5UDK4rMPYWF43LdP+JP2Ag=="
-                length="26567110"
+                url="https://github.com/yequ/v2rayE/releases/download/v1.0.10/v2rayE-macos-1.0.10.zip"
+                sparkle:edSignature="E/v2RB7lY/L0RiuIP1C0y7D2+w4Aq+11msOb6j9Xhoknsn5Iki5+9VJBAs7t2TObEn8xEqAEuieb1rX6IiNNCQ=="
+                length="26566707"
                 type="application/octet-stream" />
         </item>
     </channel>

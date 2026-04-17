@@ -196,16 +196,23 @@ struct ContentView: View {
                 nodeCard
                 launchAndModeCard
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             VStack(spacing: 12) {
                 coreCard
                 portCard
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     private var subscriptionCard: some View {
-        sectionCard(title: "订阅", systemImage: "tray.full.fill", tint: .blue) {
+        sectionCard(
+            title: "订阅",
+            systemImage: "tray.full.fill",
+            tint: .blue,
+            headerTrailingText: subscriptionUpdatedTimeText
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 if appModel.config.subscriptions.isEmpty {
                     emptyState(text: "暂无订阅，点击右上角“添加订阅”", systemImage: "tray")
@@ -232,12 +239,6 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.regular)
                         .disabled(appModel.isBusy)
-                    }
-
-                    if let updatedAt = appModel.selectedSubscription?.lastUpdatedAt {
-                        Label(updatedAt.formatted(date: .omitted, time: .shortened), systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -295,8 +296,6 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 compactInfoRow(title: "内核", value: appModel.coreExecutablePath, tint: .orange)
 
-                compactInfoRow(title: "监听", value: appModel.config.proxyBindScope.listenAddress, tint: .pink)
-
                 if appModel.config.proxyMode == .pac {
                     compactInfoRow(title: "PAC", value: appModel.pacServerAddress, tint: .purple)
                 }
@@ -312,21 +311,20 @@ struct ContentView: View {
                     compactInputField("SOCKS5", text: $socksPortText)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
                     Text("监听范围")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .frame(width: 52, alignment: .leading)
 
                     Picker("监听范围", selection: $selectedProxyBindScope) {
                         ForEach(ProxyBindScope.allCases) { scope in
                             Text(scope.displayName).tag(scope)
                         }
                     }
+                    .labelsHidden()
                     .pickerStyle(.segmented)
-
-                    Text(selectedProxyBindScope.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
                 }
 
                 Button {
@@ -425,7 +423,13 @@ struct ContentView: View {
             )
     }
 
-    private func sectionCard<Content: View>(title: String, systemImage: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+    private func sectionCard<Content: View>(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        headerTrailingText: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 ZStack {
@@ -439,10 +443,20 @@ struct ContentView: View {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
+
+                if let headerTrailingText {
+                    Label(headerTrailingText, systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
             }
 
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(cardBackground)
     }
@@ -466,6 +480,13 @@ struct ContentView: View {
                 )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var subscriptionUpdatedTimeText: String? {
+        guard let updatedAt = appModel.selectedSubscription?.lastUpdatedAt else {
+            return nil
+        }
+        return updatedAt.formatted(date: .omitted, time: .shortened)
     }
 
     private func compactChip(icon: String, text: String) -> some View {
