@@ -3,6 +3,8 @@ import Foundation
 
 final class CoreRunner {
     private var process: Process?
+    private var outputLogFileHandle: FileHandle?
+    private var errorLogFileHandle: FileHandle?
     private let configStore: ConfigStore
 
     var isRunning: Bool {
@@ -29,10 +31,12 @@ final class CoreRunner {
             process.executableURL = executableURL
             process.arguments = ["run", "-config", configURL.path]
             
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
+            let outputLogURL = try makeCoreLogURL(fileName: "core-stdout.log")
+            let errorLogURL = try makeCoreLogURL(fileName: "core-stderr.log")
+            let outputHandle = try FileHandle(forWritingTo: outputLogURL)
+            let errorHandle = try FileHandle(forWritingTo: errorLogURL)
+            process.standardOutput = outputHandle
+            process.standardError = errorHandle
 
             var environment = ProcessInfo.processInfo.environment
             environment["v2ray.location.asset"] = configStore.coreAssetsDirectoryURL().path
@@ -40,13 +44,16 @@ final class CoreRunner {
             process.environment = environment
 
             self.process = process
+            self.outputLogFileHandle = outputHandle
+            self.errorLogFileHandle = errorHandle
             do {
                 try process.run()
                 return
             } catch {
                 lastError = error
-                let stderrData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrMsg = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let stderrMsg = (try? String(contentsOf: errorLogURL, encoding: .utf8))?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                closeLogHandles()
                 let nsError = error as NSError
                 
                 if attempt == 1 &&
@@ -81,6 +88,7 @@ final class CoreRunner {
             waitForProcessToExit(process, timeout: 0.3)
         }
 
+        closeLogHandles()
         self.process = nil
     }
 
@@ -120,6 +128,26 @@ final class CoreRunner {
         }
     }
 
+    private func makeCoreLogURL(fileName: String) throws -> URL {
+        let logDirectoryURL = configStore.coreAssetsDirectoryURL().deletingLastPathComponent()
+            .appendingPathComponent("logs", isDirectory: true)
+        try FileManager.default.createDirectory(at: logDirectoryURL, withIntermediateDirectories: true)
+
+        let logURL = logDirectoryURL.appendingPathComponent(fileName)
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+
+        try Data().write(to: logURL, options: .atomic)
+        return logURL
+    }
+
+    private func closeLogHandles() {
+        try? outputLogFileHandle?.close()
+        try? errorLogFileHandle?.close()
+        outputLogFileHandle = nil
+        errorLogFileHandle = nil
+    }
 }
 
 enum CoreRunnerError: LocalizedError {
