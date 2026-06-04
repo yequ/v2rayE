@@ -273,11 +273,6 @@ final class AppModel: ObservableObject {
 
     func checkForUpdates() {
         updateController.checkForUpdates()
-        refreshUpdateState()
-    }
-
-    func installUpdateAndRelaunch() {
-        updateController.installUpdateAndRelaunch()
     }
 
     private func refreshUpdateState() {
@@ -400,7 +395,8 @@ final class AppModel: ObservableObject {
     private func handleUpdateStatus(_ status: AppUpdateStatus) {
         updateStatusClearWorkItem?.cancel()
         updateStatusMessage = status.message
-        refreshUpdateState()
+        isUpdateReady = status.isUpdateReady
+        readyUpdateVersion = status.readyUpdateVersion
 
         guard status.isTransient else { return }
 

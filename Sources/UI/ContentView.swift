@@ -133,7 +133,7 @@ struct ContentView: View {
 
                 if appModel.isUpdateReady, let version = appModel.readyUpdateVersion {
                     Button {
-                        appModel.installUpdateAndRelaunch()
+                        appModel.checkForUpdates()
                     } label: {
                         Label("重启更新 (v\(version))", systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption.weight(.semibold))
