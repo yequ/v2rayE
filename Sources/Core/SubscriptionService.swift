@@ -85,6 +85,9 @@ final class SubscriptionService {
             return nil
         }
 
+        let headerHost = json["host"] as? String ?? ""
+        let headerPath = json["path"] as? String ?? ""
+
         return ProxyNode(
             name: json["ps"] as? String ?? address,
             address: address,
@@ -93,8 +96,10 @@ final class SubscriptionService {
             alterId: Int(json["aid"] as? String ?? "") ?? (json["aid"] as? Int ?? 0),
             security: json["scy"] as? String ?? "auto",
             network: json["net"] as? String ?? "tcp",
-            remark: json["host"] as? String ?? "",
-            proxyProtocol: .vmess
+            remark: headerHost,
+            proxyProtocol: .vmess,
+            headerHost: headerHost,
+            headerPath: headerPath
         )
     }
 
