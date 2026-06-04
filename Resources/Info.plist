@@ -25,12 +25,10 @@
     <key>SUFeedURL</key>
     <string>https://yequ.github.io/v2rayE/appcast.xml</string>
     <key>SUPublicEDKey</key>
-    <string>Q+7zctJONMQD7KC3mm4yyrTSxkkpyy0H5DsYRhWEkIw=</string>
+    <string>tX22cBP4+KA1fZ9qIg8Aa4fMwIZszZ+9hAT1kV6BOQA=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <key>SUAllowsAutomaticUpdates</key>
-    <true/>
-    <key>SUAutomaticallyUpdate</key>
     <true/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>

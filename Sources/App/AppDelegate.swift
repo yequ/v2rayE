@@ -11,16 +11,40 @@ struct AppUpdateStatus {
     let isTransient: Bool
 }
 
+enum UpdatePhase {
+    case idle
+    case checking
+    case downloading(version: String)
+    case downloaded(version: String)
+    case failed(message: String)
+}
+
 @MainActor
-final class AppUpdateController: NSObject, SPUUpdaterDelegate {
+final class AppUpdateController: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
     static let shared = AppUpdateController()
 
     private lazy var updaterController = SPUStandardUpdaterController(
         startingUpdater: false,
         updaterDelegate: self,
-        userDriverDelegate: nil
+        userDriverDelegate: self
     )
     private let automaticUpdateInterval: TimeInterval = 24 * 60 * 60
+
+    var isUpdateReady: Bool {
+        if case .downloaded = updatePhase { return true }
+        return false
+    }
+
+    var readyUpdateVersion: String? {
+        if case .downloaded(let version) = updatePhase { return version }
+        return nil
+    }
+
+    private(set) var updatePhase: UpdatePhase = .idle {
+        didSet {
+            postPhaseDidChange()
+        }
+    }
 
     private override init() {
         super.init()
@@ -44,6 +68,7 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
             let updater = self.updaterController.updater
             guard updater.automaticallyChecksForUpdates else { return }
 
+            self.updatePhase = .checking
             self.postStatus(message: "正在后台检查更新...", isTransient: true)
             updater.checkForUpdatesInBackground()
             updater.resetUpdateCycle()
@@ -59,7 +84,23 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
             showMissingConfigurationAlert()
             return
         }
+
+        if isUpdateReady {
+            installUpdateAndRelaunch()
+            return
+        }
+
+        updatePhase = .checking
         updaterController.checkForUpdates(nil)
+    }
+
+    func installUpdateAndRelaunch() {
+        let updater = updaterController.updater
+        if updater.canUpdateInBackground() {
+            updater.installUpdatesIfAvailable()
+        } else {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     private var canUseUpdater: Bool {
@@ -142,36 +183,82 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
         )
     }
 
+    private func postPhaseDidChange() {
+        NotificationCenter.default.post(
+            name: .appUpdateStatusDidChange,
+            object: AppUpdateStatus(
+                message: phaseStatusMessage(),
+                isTransient: false
+            )
+        )
+    }
+
+    private func phaseStatusMessage() -> String {
+        switch updatePhase {
+        case .idle:
+            return ""
+        case .checking:
+            return "正在检查更新..."
+        case .downloading(let version):
+            return "正在下载 v\(version)..."
+        case .downloaded(let version):
+            return "新版本 v\(version) 已就绪，点击按钮重启更新"
+        case .failed(let message):
+            return "更新失败：\(message)"
+        }
+    }
+
+    // MARK: - SPUUpdaterDelegate
+
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
-        postStatus(message: "发现新版本 \(version)，正在准备下载...", isTransient: false)
+        updatePhase = .downloading(version: version)
+        postStatus(message: "发现新版本 \(version)，正在后台下载...", isTransient: false)
     }
 
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
         let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
+        updatePhase = .downloading(version: version)
         postStatus(message: "发现新版本 \(version)，正在后台下载...", isTransient: false)
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
         let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
-        postStatus(message: "新版本 \(version) 已下载完成，稍后可安装", isTransient: false)
+        updatePhase = .downloaded(version: version)
+        postStatus(message: "新版本 \(version) 已下载完成，点击重启更新即可升级", isTransient: false)
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
+        updatePhase = .failed(message: error.localizedDescription)
         postStatus(message: "更新下载失败：\(error.localizedDescription)", isTransient: false)
     }
 
     func userDidCancelDownload(_ updater: SPUUpdater) {
+        updatePhase = .idle
         postStatus(message: "已取消更新下载", isTransient: true)
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        updatePhase = .idle
         let userInitiated = (error as NSError).userInfo["SPUNoUpdateFoundUserInitiatedKey"] as? Bool ?? false
         postStatus(message: userInitiated ? "当前已是最新版本" : "启动时已检查更新，当前已是最新版本", isTransient: true)
     }
 
     func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
         postStatus(message: "更新即将安装，应用将重新启动", isTransient: false)
+    }
+
+    // MARK: - SPUStandardUserDriverDelegate
+
+    var coreComponent: AnyObject? { nil }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(_ item: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
+        // 后台自动下载的更新，我们用自己的 UI 展示，不弹 Sparkle 的标准弹窗
+        return true
+    }
+
+    func standardUserDriverWillShowModalAlert() {
+        // 标准弹窗即将出现，可用于埋点或状态跟踪
     }
 }
 

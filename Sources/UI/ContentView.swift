@@ -131,14 +131,26 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button {
-                    appModel.checkForUpdates()
-                } label: {
-                    Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.caption.weight(.medium))
+                if appModel.isUpdateReady, let version = appModel.readyUpdateVersion {
+                    Button {
+                        appModel.installUpdateAndRelaunch()
+                    } label: {
+                        Label("重启更新 (v\(version))", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.green)
+                } else {
+                    Button {
+                        appModel.checkForUpdates()
+                    } label: {
+                        Label("检查更新", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
 
                 Button {
                     openAddSubscriptionWindow()

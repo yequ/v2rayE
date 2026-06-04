@@ -14,6 +14,8 @@ final class AppModel: ObservableObject {
     @Published var latency: Int = -1
     @Published var appVersion: String
     @Published var updateStatusMessage: String?
+    @Published var isUpdateReady = false
+    @Published var readyUpdateVersion: String?
     private var hasHandledLaunchAutoConnect = false
     private var applicationWillTerminateObserver: NSObjectProtocol?
     private var updateStatusObserver: NSObjectProtocol?
@@ -271,6 +273,16 @@ final class AppModel: ObservableObject {
 
     func checkForUpdates() {
         updateController.checkForUpdates()
+        refreshUpdateState()
+    }
+
+    func installUpdateAndRelaunch() {
+        updateController.installUpdateAndRelaunch()
+    }
+
+    private func refreshUpdateState() {
+        isUpdateReady = updateController.isUpdateReady
+        readyUpdateVersion = updateController.readyUpdateVersion
     }
 
     func quitApp() {
@@ -388,6 +400,7 @@ final class AppModel: ObservableObject {
     private func handleUpdateStatus(_ status: AppUpdateStatus) {
         updateStatusClearWorkItem?.cancel()
         updateStatusMessage = status.message
+        refreshUpdateState()
 
         guard status.isTransient else { return }
 
