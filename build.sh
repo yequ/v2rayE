@@ -75,13 +75,15 @@ collect_core_sources() {
 
     candidate_name="$(basename "$candidate")"
     duplicate_found=0
-    for existing_source in "${sources[@]}"; do
-      existing_name="$(basename "$existing_source")"
-      if [ "$existing_name" = "$candidate_name" ]; then
-        duplicate_found=1
-        break
-      fi
-    done
+    if [ ${#sources[@]} -gt 0 ]; then
+      for existing_source in "${sources[@]}"; do
+        existing_name="$(basename "$existing_source")"
+        if [ "$existing_name" = "$candidate_name" ]; then
+          duplicate_found=1
+          break
+        fi
+      done
+    fi
 
     if [ "$duplicate_found" -eq 0 ]; then
       sources+=("$candidate")
