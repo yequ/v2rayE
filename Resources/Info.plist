@@ -23,7 +23,7 @@
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>SUFeedURL</key>
-    <string>https://yequ.github.io/v2rayE/appcast.xml</string>
+    <string>https://raw.githubusercontent.com/yequ/v2rayE/main/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>tX22cBP4+KA1fZ9qIg8Aa4fMwIZszZ+9hAT1kV6BOQA=</string>
     <key>SUEnableAutomaticChecks</key>
