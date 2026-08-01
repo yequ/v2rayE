@@ -11,8 +11,15 @@ final class V2RayConfigBuilder {
         let outbound = buildOutbound(for: node)
 
         let payload: [String: Any] = [
+            "dns": [
+                "servers": [
+                    "8.8.8.8",
+                    "1.1.1.1",
+                    "localhost"
+                ]
+            ],
             "log": [
-                "loglevel": "warning"
+                "loglevel": "info"
             ],
             "inbounds": [
                 [
@@ -178,9 +185,7 @@ final class V2RayConfigBuilder {
         }
 
         if !node.headerHost.isEmpty {
-            settings["headers"] = [
-                "Host": node.headerHost
-            ]
+            settings["host"] = node.headerHost
         }
 
         return settings

@@ -247,6 +247,7 @@ final class AppModel: ObservableObject {
                     if coreRunner.isRunning {
                         self.cancelLaunchAutoConnectRetry(resetRetryState: true)
                         self.status = CoreStatus(state: .connected, message: "已连接：\(nodeName)")
+                        self.setupCoreErrorMonitoring()
                     } else {
                         self.handleConnectionFailure(
                             message: "v2ray 启动失败，请检查节点配置和内核文件",
@@ -267,8 +268,19 @@ final class AppModel: ObservableObject {
 
     func disconnect() {
         cancelLaunchAutoConnectRetry(resetRetryState: true)
+        coreRunner.onErrorDetected = nil
         cleanupConnectionRuntimeState()
         status = CoreStatus(state: .disconnected, message: "已断开")
+    }
+
+    private func setupCoreErrorMonitoring() {
+        coreRunner.onErrorDetected = { [weak self] errorLine in
+            guard let self, self.status.state == .connected else { return }
+            let message = "代理连接异常，建议切换节点"
+            if self.status.message != message {
+                self.status = CoreStatus(state: .connected, message: message)
+            }
+        }
     }
 
     func checkForUpdates() {
@@ -418,6 +430,7 @@ final class AppModel: ObservableObject {
     }
 
     private func cleanupConnectionRuntimeState() {
+        coreRunner.onErrorDetected = nil
         coreRunner.stop()
         pacServer.stop()
         latencyChecker.stopMonitoring()

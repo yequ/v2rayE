@@ -6,10 +6,13 @@ final class CoreRunner {
     private var outputLogFileHandle: FileHandle?
     private var errorLogFileHandle: FileHandle?
     private let configStore: ConfigStore
+    private var stdoutMonitorTask: Task<Void, Never>?
 
     var isRunning: Bool {
         process?.isRunning == true
     }
+
+    var onErrorDetected: ((String) -> Void)?
 
     init(configStore: ConfigStore) {
         self.configStore = configStore
@@ -33,10 +36,16 @@ final class CoreRunner {
             
             let outputLogURL = try makeCoreLogURL(fileName: "core-stdout.log")
             let errorLogURL = try makeCoreLogURL(fileName: "core-stderr.log")
-            let outputHandle = try FileHandle(forWritingTo: outputLogURL)
             let errorHandle = try FileHandle(forWritingTo: errorLogURL)
-            process.standardOutput = outputHandle
             process.standardError = errorHandle
+
+            let stdoutPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            let outputHandle = try FileHandle(forWritingTo: outputLogURL)
+            self.outputLogFileHandle = outputHandle
+            self.errorLogFileHandle = errorHandle
+
+            startStdoutMonitor(pipe: stdoutPipe, logHandle: outputHandle)
 
             var environment = ProcessInfo.processInfo.environment
             environment["v2ray.location.asset"] = configStore.coreAssetsDirectoryURL().path
@@ -44,8 +53,6 @@ final class CoreRunner {
             process.environment = environment
 
             self.process = process
-            self.outputLogFileHandle = outputHandle
-            self.errorLogFileHandle = errorHandle
             do {
                 try process.run()
                 return
@@ -54,11 +61,12 @@ final class CoreRunner {
                 let stderrMsg = (try? String(contentsOf: errorLogURL, encoding: .utf8))?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 closeLogHandles()
+                cancelStdoutMonitor()
                 let nsError = error as NSError
                 
                 if attempt == 1 &&
                    ((nsError.domain == NSPOSIXErrorDomain && nsError.code == EACCES) ||
-                    (nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoPermissionError)) {
+                     (nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoPermissionError)) {
                     try ensureExecutablePermissionIfNeeded(for: executableURL)
                     continue
                 }
@@ -75,6 +83,49 @@ final class CoreRunner {
         }
     }
 
+    private func startStdoutMonitor(pipe: Pipe, logHandle: FileHandle) {
+        cancelStdoutMonitor()
+        stdoutMonitorTask = Task.detached { [weak self] in
+            var errorCount = 0
+            let errorPatterns = [
+                "failed to process outbound traffic",
+                "failed to find an available destination",
+                "all retry attempts failed",
+                "bad handshake",
+                "connection refused",
+                "i/o timeout",
+                "no such host"
+            ]
+            do {
+                for try await line in pipe.fileHandleForReading.bytes.lines {
+                    autoreleasepool {
+                        if let data = (line + "\n").data(using: .utf8) {
+                            try? logHandle.write(contentsOf: data)
+                        }
+                    }
+                    let lowercased = line.lowercased()
+                    for pattern in errorPatterns {
+                        if lowercased.contains(pattern) {
+                            errorCount += 1
+                            if errorCount >= 3 {
+                                Task { @MainActor [weak self] in
+                                    self?.onErrorDetected?(line)
+                                }
+                                errorCount = 0
+                            }
+                            break
+                        }
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    private func cancelStdoutMonitor() {
+        stdoutMonitorTask?.cancel()
+        stdoutMonitorTask = nil
+    }
+
     func stop() {
         guard let process else { return }
 
@@ -88,6 +139,7 @@ final class CoreRunner {
             waitForProcessToExit(process, timeout: 0.3)
         }
 
+        cancelStdoutMonitor()
         closeLogHandles()
         self.process = nil
     }
