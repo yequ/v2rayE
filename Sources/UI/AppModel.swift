@@ -298,6 +298,10 @@ final class AppModel: ObservableObject {
         updateController.checkForUpdates()
     }
 
+    func downloadUpdate() {
+        updateController.downloadUpdate()
+    }
+
     private func refreshUpdateState() {
         isUpdateReady = updateController.isUpdateReady
         readyUpdateVersion = updateController.readyUpdateVersion

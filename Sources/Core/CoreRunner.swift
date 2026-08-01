@@ -136,12 +136,13 @@ final class CoreRunner {
 
     private func scheduleRecoveryCheck() {
         recoveryTask?.cancel()
+        let windowSeconds = errorWindowSeconds
         recoveryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(self.errorWindowSeconds) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(windowSeconds) * 1_000_000_000)
             guard let self else { return }
             let now = Date()
             self.errorTimestamps = self.errorTimestamps.filter {
-                now.timeIntervalSince($0) < self.errorWindowSeconds
+                now.timeIntervalSince($0) < windowSeconds
             }
             if self.errorTimestamps.isEmpty {
                 Task { @MainActor [weak self] in

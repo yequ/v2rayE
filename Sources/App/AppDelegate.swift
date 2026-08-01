@@ -33,6 +33,7 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
 
     var isUpdateReady = false
     var readyUpdateVersion: String?
+    private var foundUpdateItem: SUAppcastItem?
 
     private override init() {
         super.init()
@@ -44,11 +45,10 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
         let updater = updaterController.updater
         updater.automaticallyChecksForUpdates = true
         updater.updateCheckInterval = automaticUpdateInterval
-        updater.automaticallyDownloadsUpdates = true
+        updater.automaticallyDownloadsUpdates = false
 
         updaterController.startUpdater()
 
-        // Sparkle 建议在启动 updater 后的下一次 runloop 中触发启动检查。
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let updater = self.updaterController.updater
@@ -56,7 +56,6 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
 
             self.postStatus(message: "正在后台检查更新...", isTransient: true)
             updater.checkForUpdatesInBackground()
-            updater.resetUpdateCycle()
         }
     }
 
@@ -70,6 +69,23 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
             return
         }
         updaterController.checkForUpdates(nil)
+    }
+
+    func downloadUpdate() {
+        guard isRunningFromAppBundle, isConfigured else { return }
+        guard foundUpdateItem != nil else {
+            // 没有缓存的更新项，回退到手动检查
+            checkForUpdates()
+            return
+        }
+
+        let version = readyUpdateVersion ?? ""
+        postStatus(message: "正在下载 v\(version)...", isTransient: false)
+
+        let updater = updaterController.updater
+        updater.automaticallyDownloadsUpdates = true
+        updater.resetUpdateCycle()
+        updater.checkForUpdatesInBackground()
     }
 
     private var canUseUpdater: Bool {
@@ -161,12 +177,24 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
-        postStatus(message: "发现新版本 \(version)，正在后台下载...", isTransient: false)
+        foundUpdateItem = item
+        isUpdateReady = true
+        readyUpdateVersion = version
+
+        // 如果正在自动下载（用户点击了下载按钮），不覆盖下载状态消息
+        if !updater.automaticallyDownloadsUpdates {
+            postStatus(
+                message: "发现新版本 v\(version)，点击下载更新",
+                isTransient: false,
+                isUpdateReady: true,
+                readyUpdateVersion: version
+            )
+        }
     }
 
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
         let version = item.displayVersionString.isEmpty ? item.versionString : item.displayVersionString
-        postStatus(message: "正在后台下载 v\(version)...", isTransient: false)
+        postStatus(message: "正在下载 v\(version)...", isTransient: false)
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
@@ -174,7 +202,7 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
         isUpdateReady = true
         readyUpdateVersion = version
         postStatus(
-            message: "v\(version) 已下载就绪，点击按钮重启更新",
+            message: "v\(version) 已下载就绪，即将安装重启",
             isTransient: false,
             isUpdateReady: true,
             readyUpdateVersion: version
@@ -182,18 +210,20 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate {
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: Error) {
-        isUpdateReady = false
-        readyUpdateVersion = nil
-        postStatus(message: "更新下载失败：\(error.localizedDescription)", isTransient: false)
+        isUpdateReady = true
+        foundUpdateItem = item
+        updater.automaticallyDownloadsUpdates = false
+        postStatus(message: "下载失败，请重试：\(error.localizedDescription)", isTransient: false)
     }
 
     func userDidCancelDownload(_ updater: SPUUpdater) {
-        isUpdateReady = false
-        readyUpdateVersion = nil
-        postStatus(message: "已取消更新下载", isTransient: true)
+        isUpdateReady = true
+        updater.automaticallyDownloadsUpdates = false
+        postStatus(message: "下载已取消，点击按钮重新下载", isTransient: true)
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        foundUpdateItem = nil
         let userInitiated = (error as NSError).userInfo["SPUNoUpdateFoundUserInitiatedKey"] as? Bool ?? false
         postStatus(message: userInitiated ? "当前已是最新版本" : "启动时已检查更新，当前已是最新版本", isTransient: true)
     }

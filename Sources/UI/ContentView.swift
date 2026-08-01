@@ -133,9 +133,9 @@ struct ContentView: View {
 
                 if appModel.isUpdateReady, let version = appModel.readyUpdateVersion {
                     Button {
-                        appModel.checkForUpdates()
+                        appModel.downloadUpdate()
                     } label: {
-                        Label("重启更新 (v\(version))", systemImage: "arrow.triangle.2.circlepath")
+                        Label("下载更新 v\(version)", systemImage: "arrow.down.circle.fill")
                             .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.borderedProminent)
