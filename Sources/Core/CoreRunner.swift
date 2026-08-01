@@ -13,6 +13,7 @@ final class CoreRunner {
     }
 
     var onErrorDetected: ((String) -> Void)?
+    var onErrorRecovered: (() -> Void)?
 
     init(configStore: ConfigStore) {
         self.configStore = configStore
@@ -83,10 +84,16 @@ final class CoreRunner {
         }
     }
 
+    private var errorTimestamps: [Date] = []
+    private var recoveryTask: Task<Void, Never>?
+    private let errorWindowSeconds: TimeInterval = 30
+    private let errorThreshold = 3
+
     private func startStdoutMonitor(pipe: Pipe, logHandle: FileHandle) {
         cancelStdoutMonitor()
+        errorTimestamps.removeAll()
+        recoveryTask?.cancel()
         stdoutMonitorTask = Task.detached { [weak self] in
-            var errorCount = 0
             let errorPatterns = [
                 "failed to process outbound traffic",
                 "failed to find an available destination",
@@ -106,13 +113,19 @@ final class CoreRunner {
                     let lowercased = line.lowercased()
                     for pattern in errorPatterns {
                         if lowercased.contains(pattern) {
-                            errorCount += 1
-                            if errorCount >= 3 {
+                            guard let self else { break }
+                            let now = Date()
+                            self.errorTimestamps.append(now)
+                            self.errorTimestamps = self.errorTimestamps.filter {
+                                now.timeIntervalSince($0) < self.errorWindowSeconds
+                            }
+                            if self.errorTimestamps.count >= self.errorThreshold {
                                 Task { @MainActor [weak self] in
                                     self?.onErrorDetected?(line)
                                 }
-                                errorCount = 0
+                                self.errorTimestamps.removeAll()
                             }
+                            self.scheduleRecoveryCheck()
                             break
                         }
                     }
@@ -121,9 +134,29 @@ final class CoreRunner {
         }
     }
 
+    private func scheduleRecoveryCheck() {
+        recoveryTask?.cancel()
+        recoveryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(self.errorWindowSeconds) * 1_000_000_000)
+            guard let self else { return }
+            let now = Date()
+            self.errorTimestamps = self.errorTimestamps.filter {
+                now.timeIntervalSince($0) < self.errorWindowSeconds
+            }
+            if self.errorTimestamps.isEmpty {
+                Task { @MainActor [weak self] in
+                    self?.onErrorRecovered?()
+                }
+            }
+        }
+    }
+
     private func cancelStdoutMonitor() {
         stdoutMonitorTask?.cancel()
         stdoutMonitorTask = nil
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        errorTimestamps.removeAll()
     }
 
     func stop() {

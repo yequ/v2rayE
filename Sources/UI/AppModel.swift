@@ -24,6 +24,7 @@ final class AppModel: ObservableObject {
     private var launchAutoConnectRetryIndex = 0
     private let latencyChecker = LatencyChecker()
     private let launchAutoConnectRetryDelays: [TimeInterval] = [1.5, 3.0, 5.0]
+    private var connectedNodeName: String = ""
 
     private let configStore: ConfigStore
     private let subscriptionService: SubscriptionService
@@ -246,6 +247,7 @@ final class AppModel: ObservableObject {
                 DispatchQueue.main.async {
                     if coreRunner.isRunning {
                         self.cancelLaunchAutoConnectRetry(resetRetryState: true)
+                        self.connectedNodeName = nodeName
                         self.status = CoreStatus(state: .connected, message: "已连接：\(nodeName)")
                         self.setupCoreErrorMonitoring()
                     } else {
@@ -269,6 +271,7 @@ final class AppModel: ObservableObject {
     func disconnect() {
         cancelLaunchAutoConnectRetry(resetRetryState: true)
         coreRunner.onErrorDetected = nil
+        coreRunner.onErrorRecovered = nil
         cleanupConnectionRuntimeState()
         status = CoreStatus(state: .disconnected, message: "已断开")
     }
@@ -279,6 +282,14 @@ final class AppModel: ObservableObject {
             let message = "代理连接异常，建议切换节点"
             if self.status.message != message {
                 self.status = CoreStatus(state: .connected, message: message)
+            }
+        }
+        coreRunner.onErrorRecovered = { [weak self] in
+            guard let self, self.status.state == .connected else { return }
+            let errorMessage = "代理连接异常，建议切换节点"
+            if self.status.message == errorMessage {
+                let nodeName = self.connectedNodeName
+                self.status = CoreStatus(state: .connected, message: "已连接：\(nodeName)")
             }
         }
     }
@@ -431,6 +442,7 @@ final class AppModel: ObservableObject {
 
     private func cleanupConnectionRuntimeState() {
         coreRunner.onErrorDetected = nil
+        coreRunner.onErrorRecovered = nil
         coreRunner.stop()
         pacServer.stop()
         latencyChecker.stopMonitoring()

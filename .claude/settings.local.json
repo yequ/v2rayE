@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl *)",
+      "Bash(unzip -p /Users/liushishi/code/v2rayE/dist/v2rayE-macos-1.0.13.zip \"v2rayE.app/Contents/Info.plist\")",
+      "Bash(python3 -c \"import sys; import plistlib; data = plistlib.loads\\(sys.stdin.buffer.read\\(\\)\\); print\\('CFBundleShortVersionString:', data.get\\('CFBundleShortVersionString'\\)\\); print\\('CFBundleVersion:', data.get\\('CFBundleVersion'\\)\\)\")",
+      "Bash(swift build *)",
+      "Bash(SPARKLE_PUBLIC_ED_KEY=\"tX22cBP4+KA1fZ9qIg8Aa4fMwIZszZ+9hAT1kV6BOQA=\" bash *)",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(gh auth *)",
+      "Bash(lsof -iTCP:1080 -sTCP:LISTEN -P -n)",
+      "Bash(lsof -iTCP:1087 -sTCP:LISTEN -P -n)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P -n)",
+      "Bash(scutil --dns)",
+      "Bash(nc -zv -w 5 cfhk02.holytechx.com 443)",
+      "Bash(host cfhk02.holytechx.com)",
+      "Bash(nslookup cfhk02.holytechx.com)",
+      "Bash(timeout 5 bash -c 'echo > /dev/tcp/cfhk02.holytechx.com/443 && echo \"连接成功\"')",
+      "Bash(ps -p 39362 -o pid,ppid,user,%cpu,%mem,etime,args=)",
+      "Bash(python3 -c ' *)",
+      "Bash(/Applications/v2rayE.app/Contents/Helpers/xray version *)",
+      "Read(//private/tmp/claude-501/**)",
+      "Bash(rm -f /tmp/claude-501/tmp*.json)"
+    ]
+  }
+}
