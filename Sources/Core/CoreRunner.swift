@@ -84,6 +84,7 @@ final class CoreRunner {
         }
     }
 
+    private let errorStateLock = NSLock()
     private var errorTimestamps: [Date] = []
     private var recoveryTask: Task<Void, Never>?
     private let errorWindowSeconds: TimeInterval = 30
@@ -91,7 +92,7 @@ final class CoreRunner {
 
     private func startStdoutMonitor(pipe: Pipe, logHandle: FileHandle) {
         cancelStdoutMonitor()
-        errorTimestamps.removeAll()
+        errorStateLock.withLock { errorTimestamps.removeAll() }
         recoveryTask?.cancel()
         stdoutMonitorTask = Task.detached { [weak self] in
             let errorPatterns = [
@@ -115,15 +116,21 @@ final class CoreRunner {
                         if lowercased.contains(pattern) {
                             guard let self else { break }
                             let now = Date()
-                            self.errorTimestamps.append(now)
-                            self.errorTimestamps = self.errorTimestamps.filter {
-                                now.timeIntervalSince($0) < self.errorWindowSeconds
+                            var shouldNotify = false
+                            self.errorStateLock.withLock {
+                                self.errorTimestamps.append(now)
+                                self.errorTimestamps = self.errorTimestamps.filter {
+                                    now.timeIntervalSince($0) < self.errorWindowSeconds
+                                }
+                                if self.errorTimestamps.count >= self.errorThreshold {
+                                    shouldNotify = true
+                                    self.errorTimestamps.removeAll()
+                                }
                             }
-                            if self.errorTimestamps.count >= self.errorThreshold {
+                            if shouldNotify {
                                 Task { @MainActor [weak self] in
                                     self?.onErrorDetected?(line)
                                 }
-                                self.errorTimestamps.removeAll()
                             }
                             self.scheduleRecoveryCheck()
                             break
@@ -141,10 +148,13 @@ final class CoreRunner {
             try? await Task.sleep(nanoseconds: UInt64(windowSeconds) * 1_000_000_000)
             guard let self else { return }
             let now = Date()
-            self.errorTimestamps = self.errorTimestamps.filter {
-                now.timeIntervalSince($0) < windowSeconds
+            let isEmpty: Bool = self.errorStateLock.withLock {
+                self.errorTimestamps = self.errorTimestamps.filter {
+                    now.timeIntervalSince($0) < windowSeconds
+                }
+                return self.errorTimestamps.isEmpty
             }
-            if self.errorTimestamps.isEmpty {
+            if isEmpty {
                 Task { @MainActor [weak self] in
                     self?.onErrorRecovered?()
                 }
@@ -157,7 +167,7 @@ final class CoreRunner {
         stdoutMonitorTask = nil
         recoveryTask?.cancel()
         recoveryTask = nil
-        errorTimestamps.removeAll()
+        errorStateLock.withLock { errorTimestamps.removeAll() }
     }
 
     func stop() {
