@@ -105,6 +105,7 @@ struct ProxyNode: Identifiable, Codable, Equatable {
     var headerHost: String
     var headerPath: String
     var allowInsecure: Bool
+    var streamSecurity: String
 
     init(
         id: UUID = UUID(),
@@ -124,7 +125,8 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         publicKey: String = "",
         headerHost: String = "",
         headerPath: String = "",
-        allowInsecure: Bool = false
+        allowInsecure: Bool = false,
+        streamSecurity: String = ""
     ) {
         self.id = id
         self.name = name
@@ -144,6 +146,7 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         self.headerHost = headerHost
         self.headerPath = headerPath
         self.allowInsecure = allowInsecure
+        self.streamSecurity = streamSecurity
     }
 }
 

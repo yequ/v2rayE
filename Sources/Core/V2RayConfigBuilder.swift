@@ -80,7 +80,7 @@ final class V2RayConfigBuilder {
                             [
                                 "id": node.userId,
                                 "alterId": node.alterId,
-                                "security": "auto"
+                                "security": node.security
                             ]
                         ]
                     ]
@@ -124,11 +124,12 @@ final class V2RayConfigBuilder {
             "network": node.network
         ]
 
-        // 配置 security 层
-        if node.security == "reality" {
+        // 配置 security 层（streamSecurity 优先，兼容旧数据无此字段时回退到 security）
+        let transportSecurity = !node.streamSecurity.isEmpty ? node.streamSecurity : node.security
+        if transportSecurity == "reality" {
             streamSettings["security"] = "reality"
             streamSettings["realitySettings"] = buildRealitySettings(for: node)
-        } else if node.security == "tls" {
+        } else if transportSecurity == "tls" {
             streamSettings["security"] = "tls"
             streamSettings["tlsSettings"] = buildTlsSettings(for: node)
         }

@@ -88,14 +88,12 @@ final class SubscriptionService {
         let headerHost = json["host"] as? String ?? ""
         let headerPath = json["path"] as? String ?? ""
 
-        // 解析传输层安全：tls 字段指示是否启用 TLS（与 scy 加密字段不同）
-        let tlsField = json["tls"] as? String ?? ""
-        // 当 tls 为 "tls" 时启用 TLS 传输安全；否则沿用 scy 加密字段
-        let security: String
-        if tlsField == "tls" {
-            security = "tls"
+        // 传输层安全由 tls 字段独立指示（与 scy 协议加密分离）
+        let streamSecurity: String
+        if (json["tls"] as? String ?? "") == "tls" {
+            streamSecurity = "tls"
         } else {
-            security = json["scy"] as? String ?? "auto"
+            streamSecurity = ""
         }
 
         let sni = json["sni"] as? String ?? ""
@@ -118,7 +116,7 @@ final class SubscriptionService {
             port: port,
             userId: userId,
             alterId: Int(json["aid"] as? String ?? "") ?? (json["aid"] as? Int ?? 0),
-            security: security,
+            security: json["scy"] as? String ?? "auto",
             network: json["net"] as? String ?? "tcp",
             remark: json["ps"] as? String ?? address,
             proxyProtocol: .vmess,
@@ -127,7 +125,8 @@ final class SubscriptionService {
             fingerprint: fingerprint,
             headerHost: headerHost,
             headerPath: headerPath,
-            allowInsecure: allowInsecure
+            allowInsecure: allowInsecure,
+            streamSecurity: streamSecurity
         )
     }
 
@@ -201,7 +200,8 @@ final class SubscriptionService {
             publicKey: publicKey,
             headerHost: headerHost,
             headerPath: headerPath,
-            allowInsecure: allowInsecure
+            allowInsecure: allowInsecure,
+            streamSecurity: security
         )
     }
 
