@@ -88,18 +88,46 @@ final class SubscriptionService {
         let headerHost = json["host"] as? String ?? ""
         let headerPath = json["path"] as? String ?? ""
 
+        // 解析传输层安全：tls 字段指示是否启用 TLS（与 scy 加密字段不同）
+        let tlsField = json["tls"] as? String ?? ""
+        // 当 tls 为 "tls" 时启用 TLS 传输安全；否则沿用 scy 加密字段
+        let security: String
+        if tlsField == "tls" {
+            security = "tls"
+        } else {
+            security = json["scy"] as? String ?? "auto"
+        }
+
+        let sni = json["sni"] as? String ?? ""
+        let fingerprint = json["fp"] as? String ?? ""
+        let alpn = json["alpn"] as? String ?? ""
+
+        // 解析 allowInsecure：支持 bool 和字符串两种类型
+        let allowInsecure: Bool
+        if let allowInsecureBool = json["allowInsecure"] as? Bool {
+            allowInsecure = allowInsecureBool
+        } else if let allowInsecureStr = json["allowInsecure"] as? String {
+            allowInsecure = (allowInsecureStr == "true" || allowInsecureStr == "1")
+        } else {
+            allowInsecure = false
+        }
+
         return ProxyNode(
             name: json["ps"] as? String ?? address,
             address: address,
             port: port,
             userId: userId,
             alterId: Int(json["aid"] as? String ?? "") ?? (json["aid"] as? Int ?? 0),
-            security: json["scy"] as? String ?? "auto",
+            security: security,
             network: json["net"] as? String ?? "tcp",
-            remark: headerHost,
+            remark: json["ps"] as? String ?? address,
             proxyProtocol: .vmess,
+            sni: sni,
+            alpn: alpn,
+            fingerprint: fingerprint,
             headerHost: headerHost,
-            headerPath: headerPath
+            headerPath: headerPath,
+            allowInsecure: allowInsecure
         )
     }
 
@@ -154,6 +182,7 @@ final class SubscriptionService {
         let publicKey = params["pbk"] ?? ""
         let headerHost = params["host"] ?? ""
         let headerPath = params["path"] ?? ""
+        let allowInsecure = params["allowInsecure"] == "true" || params["allowInsecure"] == "1"
 
         return ProxyNode(
             name: name,
@@ -171,7 +200,8 @@ final class SubscriptionService {
             fingerprint: fingerprint,
             publicKey: publicKey,
             headerHost: headerHost,
-            headerPath: headerPath
+            headerPath: headerPath,
+            allowInsecure: allowInsecure
         )
     }
 

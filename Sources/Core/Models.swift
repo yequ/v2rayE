@@ -104,6 +104,7 @@ struct ProxyNode: Identifiable, Codable, Equatable {
     var publicKey: String
     var headerHost: String
     var headerPath: String
+    var allowInsecure: Bool
 
     init(
         id: UUID = UUID(),
@@ -122,7 +123,8 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         fingerprint: String = "",
         publicKey: String = "",
         headerHost: String = "",
-        headerPath: String = ""
+        headerPath: String = "",
+        allowInsecure: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -141,6 +143,7 @@ struct ProxyNode: Identifiable, Codable, Equatable {
         self.publicKey = publicKey
         self.headerHost = headerHost
         self.headerPath = headerPath
+        self.allowInsecure = allowInsecure
     }
 }
 

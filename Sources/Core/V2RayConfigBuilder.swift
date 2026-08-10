@@ -80,7 +80,7 @@ final class V2RayConfigBuilder {
                             [
                                 "id": node.userId,
                                 "alterId": node.alterId,
-                                "security": node.security
+                                "security": "auto"
                             ]
                         ]
                     ]
@@ -138,6 +138,8 @@ final class V2RayConfigBuilder {
             streamSettings["wsSettings"] = buildWsSettings(for: node)
         } else if node.network == "grpc" {
             streamSettings["grpcSettings"] = buildGrpcSettings(for: node)
+        } else if node.network == "tcp" && (!node.headerHost.isEmpty || !node.headerPath.isEmpty) {
+            streamSettings["tcpSettings"] = buildTcpHttpSettings(for: node)
         }
 
         return streamSettings
@@ -163,11 +165,15 @@ final class V2RayConfigBuilder {
 
     private func buildTlsSettings(for node: ProxyNode) -> [String: Any] {
         var settings: [String: Any] = [
-            "allowInsecure": false
+            "allowInsecure": node.allowInsecure
         ]
 
         if !node.sni.isEmpty {
             settings["serverName"] = node.sni
+        }
+
+        if !node.fingerprint.isEmpty {
+            settings["fingerprint"] = node.fingerprint
         }
 
         if !node.alpn.isEmpty {
@@ -199,6 +205,24 @@ final class V2RayConfigBuilder {
         }
 
         return settings
+    }
+
+    private func buildTcpHttpSettings(for node: ProxyNode) -> [String: Any] {
+        var request: [String: Any] = [:]
+
+        if !node.headerPath.isEmpty {
+            request["path"] = [node.headerPath]
+        }
+        if !node.headerHost.isEmpty {
+            request["headers"] = ["Host": [node.headerHost]]
+        }
+
+        var header: [String: Any] = ["type": "http"]
+        if !request.isEmpty {
+            header["request"] = request
+        }
+
+        return ["header": header]
     }
 
     private func routingPayload(for proxyMode: ProxyMode) -> [String: Any] {
