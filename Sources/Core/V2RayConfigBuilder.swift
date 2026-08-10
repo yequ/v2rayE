@@ -152,8 +152,10 @@ final class V2RayConfigBuilder {
             "fingerprint": node.fingerprint.isEmpty ? "chrome" : node.fingerprint
         ]
 
-        if !node.sni.isEmpty {
-            settings["serverName"] = node.sni
+        // serverName: sni 优先，为空时回退到 headerHost
+        let serverName = !node.sni.isEmpty ? node.sni : node.headerHost
+        if !serverName.isEmpty {
+            settings["serverName"] = serverName
         }
         if !node.publicKey.isEmpty {
             settings["publicKey"] = node.publicKey
@@ -169,8 +171,10 @@ final class V2RayConfigBuilder {
             "allowInsecure": node.allowInsecure
         ]
 
-        if !node.sni.isEmpty {
-            settings["serverName"] = node.sni
+        // SNI: sni 优先，为空时回退到 headerHost（CF 节点通常没有 sni 字段）
+        let serverName = !node.sni.isEmpty ? node.sni : node.headerHost
+        if !serverName.isEmpty {
+            settings["serverName"] = serverName
         }
 
         if !node.fingerprint.isEmpty {
