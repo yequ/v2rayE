@@ -139,7 +139,8 @@ final class V2RayConfigBuilder {
             streamSettings["wsSettings"] = buildWsSettings(for: node)
         } else if node.network == "grpc" {
             streamSettings["grpcSettings"] = buildGrpcSettings(for: node)
-        } else if node.network == "tcp" && (!node.headerHost.isEmpty || !node.headerPath.isEmpty) {
+        } else if node.network == "tcp" && transportSecurity != "reality" && (!node.headerHost.isEmpty || !node.headerPath.isEmpty) {
+            // reality 节点的 headerHost 是伪装目标域名（用于 serverName），不是 HTTP 伪装头
             streamSettings["tcpSettings"] = buildTcpHttpSettings(for: node)
         }
 
